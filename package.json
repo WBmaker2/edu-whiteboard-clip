@@ -1,0 +1,50 @@
+{
+  "name": "edu-whiteboard-clip",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "preview": "vite preview",
+    "qa:smoke": "node scripts/qa-smoke.mjs",
+    "qa:ai": "node scripts/qa-ai-mock.mjs",
+    "qa:v2": "node scripts/qa-v2.mjs",
+    "qa:mp4": "node scripts/qa-mp4.mjs",
+    "qa:layouts": "node scripts/qa-layouts.mjs"
+  },
+  "dependencies": {
+    "fix-webm-duration": "^1.0.6",
+    "idb-keyval": "^6.2.2",
+    "lucide": "^0.468.0",
+    "lucide-react": "^0.468.0",
+    "mp4-muxer": "^5.2.2",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "zustand": "^5.0.6"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.11",
+    "@testing-library/jest-dom": "^6.6.4",
+    "@testing-library/react": "^16.3.0",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^4.6.0",
+    "eslint": "^9.31.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.20",
+    "fake-indexeddb": "^6.2.6",
+    "globals": "^16.3.0",
+    "jsdom": "^26.1.0",
+    "playwright": "^1.55.1",
+    "tailwindcss": "^4.1.11",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.38.0",
+    "vite": "^7.0.5",
+    "vitest": "^5.0.5"
+  },
+  "license": "MIT"
+}

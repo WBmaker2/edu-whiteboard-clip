@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "topic": "짧은 영상 내보내기 테스트",
+  "themeId": "paper",
+  "visualStyle": "diagram",
+  "layoutStyle": "flow",
+  "voice": "Kore",
+  "model": "gemini-3.8-flash",
+  "ttsModel": "gemini-3.8-flash-tts",
+  "bgmId": "none",
+  "savedAt": "2026-10-17T00:00:00.000Z",
+  "scenes": [
+    {
+      "id": "short_1",
+      "type": "intro",
+      "title": "짧은 테스트 영상",
+      "subtitle": "내보내기 동작을 확인하는 두 장면짜리 프로젝트입니다.",
+      "duration": 1.5,
+      "windows": [[0, 0.5], [0.5, 1], [1, 1.5]],
+      "audioSource": "none",
+      "beats": [
+        { "id": "b1", "label": "첫 번째", "desc": "테스트 장면", "narration": "첫 번째 테스트 장면입니다.", "iconType": "Sun" },
+        { "id": "b2", "label": "두 번째", "desc": "테스트 장면", "narration": "두 번째 테스트 장면입니다.", "iconType": "Leaf" },
+        { "id": "b3", "label": "세 번째", "desc": "테스트 장면", "narration": "세 번째 테스트 장면입니다.", "iconType": "Check" }
+      ]
+    },
+    {
+      "id": "short_2",
+      "type": "outro",
+      "title": "내보내기 완료",
+      "subtitle": "영상 파일이 정상적으로 만들어졌는지 확인합니다.",
+      "duration": 1.5,
+      "windows": [[0, 0.5], [0.5, 1], [1, 1.5]],
+      "audioSource": "none",
+      "beats": [
+        { "id": "b4", "label": "정리", "desc": "핵심 요약", "narration": "첫 번째 정리 문장입니다.", "iconType": "Star" },
+        { "id": "b5", "label": "확인", "desc": "내보내기 확인", "narration": "두 번째 정리 문장입니다.", "iconType": "Target" },
+        { "id": "b6", "label": "마무리", "desc": "다음 단계", "narration": "세 번째 정리 문장입니다.", "iconType": "BookOpen" }
+      ]
+    }
+  ]
+}
