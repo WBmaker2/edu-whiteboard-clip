@@ -28,6 +28,8 @@ jobs:
         run: npm run build
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
+      - name: Install ffmpeg (for QA duration checks)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
       - name: Start dev server
         run: |
           npm run dev -- --port 5173 > /tmp/vite.log 2>&1 &

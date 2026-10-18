@@ -106,6 +106,7 @@ npm run dev
 | `npm run qa:all` | 스모크·V2·AI·수업자료·접근성·PWA QA 연속 실행 |
 
 브라우저 테스트는 Playwright Chromium을 사용하며, 최초 1회 `npx playwright install chromium`이 필요합니다.
+`npm run qa:v2`의 영상 길이 검증에는 시스템 `ffprobe`(ffmpeg)가 필요합니다.
 개발 서버가 다른 포트에서 실행 중이면 `QA_BASE_URL=http://localhost:포트 npm run qa:smoke`처럼 주소를 지정할 수 있습니다.
 Playwright Chromium은 H.264 인코더가 없어 MP4 QA는 Chrome for Testing 같은 H.264 지원 브라우저가 필요합니다:
 `QA_CHROME="/path/to/Google Chrome for Testing" npm run qa:mp4`
