@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import {
+  applyEdgeFades,
   base64ToBytes,
   computeWindowsFromPcm,
   detectSilentSpans,
@@ -73,9 +74,47 @@ describe("tts helpers", () => {
     expect(trimmedDuration).toBeLessThan(1.2);
   });
 
+  it("removes a short static burst before speech", () => {
+    const sampleRate = 24000;
+    const burst = Math.floor(0.08 * sampleRate);
+    const gap = Math.floor(0.2 * sampleRate);
+    const speech = Math.floor(1 * sampleRate);
+    const bytes = new Uint8Array((burst + gap + speech) * 2);
+    const view = new DataView(bytes.buffer);
+    for (let index = 0; index < burst + gap + speech; index += 1) {
+      let value = 0;
+      if (index < burst) value = index % 2 === 0 ? 6000 : -6000;
+      else if (index >= burst + gap) value = Math.round(Math.sin(index / 6) * 2000);
+      view.setInt16(index * 2, value, true);
+    }
+    const trimmed = trimLeadingSilence(bytes, sampleRate, 0);
+    const trimmedDuration = pcmDuration(trimmed, sampleRate);
+    expect(trimmedDuration).toBeGreaterThan(0.9);
+    expect(trimmedDuration).toBeLessThan(1.1);
+  });
+
   it("leaves audio without a lead-in unchanged", () => {
     const pcm = tonePcm(0.5);
     expect(trimLeadingSilence(pcm, 24000, 0).length).toBe(pcm.length);
+  });
+
+  it("fades the first and last samples to silence", () => {
+    const sampleRate = 24000;
+    const pcm = tonePcm(0.5, sampleRate);
+    const faded = applyEdgeFades(pcm, sampleRate);
+    const view = new DataView(faded.buffer);
+    expect(view.getInt16(0, true)).toBe(0);
+    expect(view.getInt16(faded.length - 2, true)).toBe(0);
+    const middle = view.getInt16(Math.floor(faded.length / 4) * 2, true);
+    expect(Math.abs(middle)).toBeGreaterThan(0);
+  });
+
+  it("keeps a mid-scene start free of fades", () => {
+    const sampleRate = 24000;
+    const pcm = tonePcm(0.5, sampleRate);
+    const faded = applyEdgeFades(pcm, sampleRate, 0, 0);
+    expect(faded.length).toBe(pcm.length);
+    expect(Array.from(faded)).toEqual(Array.from(pcm));
   });
 
   it("maps silent gaps to beat windows", () => {

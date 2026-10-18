@@ -3,6 +3,7 @@ import type { AspectRatio, Project } from "../../types/project";
 import { activeBeatIndex, locateTime, projectDuration } from "../time";
 import { canvasProfile, renderScene } from "../renderer";
 import { scheduleBgm } from "../bgm";
+import { scheduleVoice } from "../voiceTrack";
 import { ensureExportFonts } from "../fonts";
 import { preloadProjectImages } from "../assets";
 import { resolutionPreset, type ResolutionId } from "../../data/presets";
@@ -115,10 +116,10 @@ async function mixAudio(project: Project, duration: number, bgmVolume: number): 
           const decoded = await decodeContext.decodeAudioData(
             (await scene.audioBlob.arrayBuffer()).slice(0),
           );
-          const source = context.createBufferSource();
-          source.buffer = decoded;
-          source.connect(context.destination);
-          source.start(Math.max(0, cursor));
+          scheduleVoice(context, context.destination, decoded, {
+            when: Math.max(0, cursor),
+            duration: Math.min(decoded.duration, sceneDuration),
+          });
           duckSpans.push({
             start: cursor,
             end: Math.min(duration, cursor + sceneDuration),

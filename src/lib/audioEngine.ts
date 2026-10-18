@@ -1,6 +1,12 @@
 import type { Project } from "../types/project";
 import { sceneStart } from "./time";
 import { scheduleBgm, type BgmHandle } from "./bgm";
+import { releaseVoice, scheduleVoice } from "./voiceTrack";
+
+interface Voice {
+  source: AudioBufferSourceNode;
+  gain: GainNode;
+}
 
 export class AudioEngine {
   private context: AudioContext | null = null;
@@ -12,7 +18,7 @@ export class AudioEngine {
   private buffers: (AudioBuffer | null)[] = [];
   private scenes: Project["scenes"] = [];
   private totalDuration = 0;
-  private sources: AudioBufferSourceNode[] = [];
+  private voices: Voice[] = [];
   private bgmHandle: BgmHandle | null = null;
   private bgmId = "none";
   private bgmVolume = 0.4;
@@ -91,14 +97,19 @@ export class AudioEngine {
       const end = start + Math.max(0.1, scene.duration);
       if (end <= projectTime) return;
       const offset = Math.max(0, projectTime - start);
+      if (offset >= buffer.duration) return;
       const when = context.currentTime + Math.max(0, start - projectTime) / rate;
-      const source = context.createBufferSource();
-      source.buffer = buffer;
-      source.playbackRate.value = rate;
-      source.connect(this.voiceGain as AudioNode);
-      const duration = Math.max(0.05, buffer.duration - offset);
-      source.start(when, offset, duration);
-      this.sources.push(source);
+      const capture = Math.max(
+        0.05,
+        Math.min(buffer.duration - offset, Math.max(0.1, scene.duration)),
+      );
+      const voice = scheduleVoice(context, this.voiceGain as AudioNode, buffer, {
+        when,
+        offset,
+        duration: capture,
+        rate,
+      });
+      this.voices.push(voice);
     });
     this.startBgm(projectTime);
   }
@@ -113,7 +124,7 @@ export class AudioEngine {
   }
 
   stop(): number {
-    if (!this.playing && this.sources.length === 0 && !this.bgmHandle) return 0;
+    if (!this.playing && this.voices.length === 0 && !this.bgmHandle) return 0;
     const total = this.totalDuration || Number.POSITIVE_INFINITY;
     const time = this.playing ? this.getTime(total) : 0;
     this.stopSources();
@@ -123,15 +134,10 @@ export class AudioEngine {
   }
 
   private stopSources(): void {
-    for (const source of this.sources) {
-      try {
-        source.stop();
-      } catch {
-        /* already stopped */
-      }
-      source.disconnect();
+    for (const voice of this.voices) {
+      releaseVoice(this.context, voice);
     }
-    this.sources = [];
+    this.voices = [];
   }
 
   getTime(total: number): number {

@@ -91,21 +91,20 @@ export function detectSilentSpans(
   return spans.filter(([start, end]) => start > 0 && end < duration - 0.01);
 }
 
-/**
- * Drops a near-silent/noisy lead-in that some TTS models emit before speech,
- * keeping a short pre-roll so the first consonant is not clipped.
- */
-export function trimLeadingSilence(
-  pcm: Uint8Array,
-  sampleRate = TTS_SAMPLE_RATE,
-  prerollMs = 60,
-): Uint8Array {
-  const samples = toInt16(pcm);
-  if (samples.length === 0) return pcm;
-  const bucket = Math.max(1, Math.floor(sampleRate / 200));
+const BUCKET_MS = 5;
+const SPEECH_LEVEL_RATIO = 0.15;
+const SUSTAIN_TOLERANCE_RATIO = 0.35;
+const SUSTAIN_MS = 150;
+const MAX_LEAD_SCAN_MS = 1500;
+
+function bucketRms(samples: Int16Array, sampleRate: number): {
+  rms: Float32Array;
+  bucket: number;
+  peak: number;
+} {
+  const bucket = Math.max(1, Math.floor((sampleRate * BUCKET_MS) / 1000));
   const buckets = Math.floor(samples.length / bucket);
-  if (buckets === 0) return pcm;
-  const rms = new Float32Array(buckets);
+  const rms = new Float32Array(Math.max(0, buckets));
   let peak = 0;
   for (let index = 0; index < buckets; index += 1) {
     let sum = 0;
@@ -117,19 +116,90 @@ export function trimLeadingSilence(
     rms[index] = Math.sqrt(sum / bucket);
     if (rms[index] > peak) peak = rms[index];
   }
-  if (peak <= 0) return pcm;
-  const threshold = peak * 0.08;
-  let speechBucket = 0;
-  for (let index = 0; index < buckets; index += 1) {
-    if (rms[index] >= threshold) {
-      speechBucket = index;
+  return { rms, bucket, peak };
+}
+
+/**
+ * Drops the noisy lead-in some TTS models emit before speech. A short burst of
+ * static at the start stays above a simple "quiet" threshold, so we look for
+ * the first *sustained* speech onset instead and cut everything before it,
+ * keeping a short pre-roll so the first consonant is not clipped.
+ */
+export function trimLeadingSilence(
+  pcm: Uint8Array,
+  sampleRate = TTS_SAMPLE_RATE,
+  prerollMs = 60,
+): Uint8Array {
+  const samples = toInt16(pcm);
+  if (samples.length === 0) return pcm;
+  const { rms, bucket, peak } = bucketRms(samples, sampleRate);
+  if (rms.length === 0 || peak <= 0) return pcm;
+
+  const speechLevel = peak * SPEECH_LEVEL_RATIO;
+  const tolerance = speechLevel * SUSTAIN_TOLERANCE_RATIO;
+  const sustain = Math.max(1, Math.round(SUSTAIN_MS / BUCKET_MS));
+  const maxScan = Math.min(rms.length, Math.round(MAX_LEAD_SCAN_MS / BUCKET_MS));
+
+  let onset: number | null = null;
+  for (let index = 0; index < maxScan; index += 1) {
+    if (rms[index] < speechLevel) continue;
+    let sustained = true;
+    const limit = Math.min(rms.length, index + sustain);
+    for (let probe = index; probe < limit; probe += 1) {
+      if (rms[probe] < tolerance) {
+        sustained = false;
+        break;
+      }
+    }
+    if (sustained) {
+      onset = index;
       break;
     }
   }
+  if (onset === null) return pcm;
+
   const prerollSamples = Math.floor((prerollMs / 1000) * sampleRate);
-  const cutSamples = Math.max(0, speechBucket * bucket - prerollSamples);
+  const cutSamples = Math.max(0, onset * bucket - prerollSamples);
   if (cutSamples <= 0) return pcm;
   return pcm.subarray(cutSamples * 2);
+}
+
+/**
+ * Applies short linear fades to the first and last samples so that starting or
+ * ending a scene never produces a click/pop.
+ */
+export function applyEdgeFades(
+  pcm: Uint8Array,
+  sampleRate = TTS_SAMPLE_RATE,
+  fadeInMs = 15,
+  fadeOutMs = 30,
+): Uint8Array {
+  const samples = toInt16(pcm);
+  const count = samples.length;
+  if (count === 0) return pcm;
+  const output = new Int16Array(count);
+  output.set(samples);
+  const fadeIn = Math.min(
+    Math.floor((fadeInMs / 1000) * sampleRate),
+    Math.floor(count / 2),
+  );
+  for (let index = 0; index < fadeIn; index += 1) {
+    output[index] = Math.round(output[index] * (index / fadeIn));
+  }
+  const fadeOut = Math.min(
+    Math.floor((fadeOutMs / 1000) * sampleRate),
+    Math.floor(count / 2),
+  );
+  for (let index = 0; index < fadeOut; index += 1) {
+    const target = count - 1 - index;
+    output[target] = Math.round(output[target] * (index / fadeOut));
+  }
+  const bytes = new Uint8Array(count * 2);
+  const view = new DataView(bytes.buffer);
+  for (let index = 0; index < count; index += 1) {
+    view.setInt16(index * 2, output[index], true);
+  }
+  return bytes;
 }
 
 export function computeWindowsFromPcm(

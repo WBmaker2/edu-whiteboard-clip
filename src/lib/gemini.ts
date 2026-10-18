@@ -11,6 +11,7 @@ import {
 } from "./storyboard";
 import type { CurriculumContext } from "../data/curriculum";
 import {
+  applyEdgeFades,
   base64ToBytes,
   computeWindowsFromPcm,
   fallbackWindows,
@@ -293,7 +294,7 @@ export async function synthesizeNarration(options: {
     ? parts.find((part: any) => part?.inlineData?.data)?.inlineData?.data
     : null;
   if (!inline) throw new Error("음성 데이터를 받지 못했습니다. 잠시 후 다시 시도해 주세요.");
-  const pcm = trimLeadingSilence(base64ToBytes(inline));
+  const pcm = applyEdgeFades(trimLeadingSilence(base64ToBytes(inline)));
   const blob = pcmToWav(pcm);
   const duration = pcmDuration(pcm);
   const windows =
