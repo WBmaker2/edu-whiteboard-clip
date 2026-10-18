@@ -91,6 +91,47 @@ export function detectSilentSpans(
   return spans.filter(([start, end]) => start > 0 && end < duration - 0.01);
 }
 
+/**
+ * Drops a near-silent/noisy lead-in that some TTS models emit before speech,
+ * keeping a short pre-roll so the first consonant is not clipped.
+ */
+export function trimLeadingSilence(
+  pcm: Uint8Array,
+  sampleRate = TTS_SAMPLE_RATE,
+  prerollMs = 60,
+): Uint8Array {
+  const samples = toInt16(pcm);
+  if (samples.length === 0) return pcm;
+  const bucket = Math.max(1, Math.floor(sampleRate / 200));
+  const buckets = Math.floor(samples.length / bucket);
+  if (buckets === 0) return pcm;
+  const rms = new Float32Array(buckets);
+  let peak = 0;
+  for (let index = 0; index < buckets; index += 1) {
+    let sum = 0;
+    const start = index * bucket;
+    for (let offset = 0; offset < bucket; offset += 1) {
+      const value = samples[start + offset] / 32768;
+      sum += value * value;
+    }
+    rms[index] = Math.sqrt(sum / bucket);
+    if (rms[index] > peak) peak = rms[index];
+  }
+  if (peak <= 0) return pcm;
+  const threshold = peak * 0.08;
+  let speechBucket = 0;
+  for (let index = 0; index < buckets; index += 1) {
+    if (rms[index] >= threshold) {
+      speechBucket = index;
+      break;
+    }
+  }
+  const prerollSamples = Math.floor((prerollMs / 1000) * sampleRate);
+  const cutSamples = Math.max(0, speechBucket * bucket - prerollSamples);
+  if (cutSamples <= 0) return pcm;
+  return pcm.subarray(cutSamples * 2);
+}
+
 export function computeWindowsFromPcm(
   pcm: Uint8Array,
   beats: Pick<Beat, "narration">[],

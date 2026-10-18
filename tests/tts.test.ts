@@ -6,6 +6,7 @@ import {
   detectSilentSpans,
   pcmDuration,
   pcmToWav,
+  trimLeadingSilence,
 } from "../src/lib/tts";
 
 function tonePcm(seconds: number, sampleRate = 24000): Uint8Array {
@@ -54,6 +55,27 @@ describe("tts helpers", () => {
     expect(spans.length).toBeGreaterThan(0);
     expect(spans[0][0]).toBeGreaterThan(0.8);
     expect(spans[0][1]).toBeLessThan(1.6);
+  });
+
+  it("trims a quiet noisy lead-in before speech", () => {
+    const sampleRate = 24000;
+    const lead = Math.floor(0.5 * sampleRate);
+    const speech = Math.floor(1 * sampleRate);
+    const bytes = new Uint8Array((lead + speech) * 2);
+    const view = new DataView(bytes.buffer);
+    for (let index = 0; index < lead + speech; index += 1) {
+      const value = index < lead ? 40 : Math.round(Math.sin(index / 6) * 2000);
+      view.setInt16(index * 2, value, true);
+    }
+    const trimmed = trimLeadingSilence(bytes, sampleRate, 0);
+    const trimmedDuration = pcmDuration(trimmed, sampleRate);
+    expect(trimmedDuration).toBeGreaterThan(0.9);
+    expect(trimmedDuration).toBeLessThan(1.2);
+  });
+
+  it("leaves audio without a lead-in unchanged", () => {
+    const pcm = tonePcm(0.5);
+    expect(trimLeadingSilence(pcm, 24000, 0).length).toBe(pcm.length);
   });
 
   it("maps silent gaps to beat windows", () => {

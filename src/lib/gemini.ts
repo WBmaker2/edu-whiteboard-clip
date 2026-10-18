@@ -16,6 +16,7 @@ import {
   fallbackWindows,
   pcmDuration,
   pcmToWav,
+  trimLeadingSilence,
 } from "./tts";
 import { backoffMs, geminiQueue, retryAfterMs } from "./geminiQueue";
 import { recordCall } from "./requestBudget";
@@ -270,7 +271,9 @@ export async function synthesizeNarration(options: {
         {
           parts: [
             {
-              text: `Read the following Korean lesson narration in a warm, clear teacher voice. Keep natural pauses between sentences.\n\n${options.text}`,
+              // Send only the narration. Any style instruction is read aloud by
+              // the TTS model, so voice tone is controlled by voiceName instead.
+              text: options.text,
             },
           ],
         },
@@ -290,7 +293,7 @@ export async function synthesizeNarration(options: {
     ? parts.find((part: any) => part?.inlineData?.data)?.inlineData?.data
     : null;
   if (!inline) throw new Error("음성 데이터를 받지 못했습니다. 잠시 후 다시 시도해 주세요.");
-  const pcm = base64ToBytes(inline);
+  const pcm = trimLeadingSilence(base64ToBytes(inline));
   const blob = pcmToWav(pcm);
   const duration = pcmDuration(pcm);
   const windows =
