@@ -1,7 +1,7 @@
 import type { Beat, Project, Scene, SceneType } from "../types/project";
 import { SCENE_LIMITS } from "../data/presets";
 import { buildWindows, uid } from "./time";
-import { audioUrlFor } from "./audioUrls";
+import { blobUrlFor } from "./blobUrls";
 
 export function sceneTextHash(beats: Beat[]): string {
   const text = beats
@@ -221,7 +221,7 @@ export function withSceneAudio(
   const next: Scene = {
     ...scene,
     audioBlob: audio.blob,
-    audioUrl: audioUrlFor(audio.blob),
+    audioUrl: blobUrlFor(audio.blob),
     audioSource: audio.source,
     audioTextHash: sceneTextHash(scene.beats),
     duration: audio.duration,
@@ -257,7 +257,7 @@ export function applySceneRewrite(
     ...(audio
       ? {
           audioBlob: audio.blob,
-          audioUrl: audioUrlFor(audio.blob),
+          audioUrl: blobUrlFor(audio.blob),
           audioSource: audio.source,
           audioTextHash: sceneTextHash(content.beats),
         }

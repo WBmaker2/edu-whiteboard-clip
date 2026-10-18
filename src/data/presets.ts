@@ -181,6 +181,33 @@ export const TTS_FALLBACKS = [
   "gemini-2.5-flash-preview-tts",
 ];
 
+/**
+ * Image generation models. `imagen-*` ids use the :predict endpoint;
+ * any other id is treated as a Gemini image-generation model and uses
+ * :generateContent with an inline image part.
+ */
+export const IMAGE_MODELS: PresetOption[] = [
+  {
+    id: "imagen-4.0-generate-001",
+    name: "Imagen 4",
+    desc: "고품질 교수자료 이미지",
+    badge: "고품질",
+  },
+  {
+    id: "gemini-2.5-flash-image",
+    name: "Gemini Image",
+    desc: "무료 티어에서 동작하는 빠른 이미지 생성",
+    badge: "무료 티어",
+  },
+];
+
+export const IMAGE_FALLBACKS = [
+  "imagen-4.0-generate-001",
+  "imagen-3.0-generate-002",
+  "gemini-2.5-flash-image",
+  "gemini-2.0-flash-preview-image-generation",
+];
+
 export const VOICES: PresetOption[] = [
   { id: "Kore", name: "Kore", desc: "안정적" },
   { id: "Puck", name: "Puck", desc: "경쾌함" },
@@ -211,6 +238,12 @@ export const TOPIC_TEMPLATES = [
   { title: "로켓이 중력을 이기고 우주로 나아가는 원리", tag: "기초 물리/항공우주", dotColor: "#7c3aed" },
   { title: "면역 세포가 바이러스를 탐색하고 퇴치하는 과정", tag: "생명과학", dotColor: "#db2777" },
   { title: "광합성이 빛을 양분으로 바꾸는 과정", tag: "통합과학/생물", dotColor: "#0891b2" },
+  { title: "미분이 순간의 변화를 계산하는 원리", tag: "수학/미적분", dotColor: "#2563eb" },
+  { title: "평균과 표준편차로 데이터를 읽는 법", tag: "수학/통계", dotColor: "#059669" },
+  { title: "판 구조론으로 본 지진이 일어나는 원리", tag: "지구과학", dotColor: "#b45309" },
+  { title: "조선 후기 실학이 세상을 바꾼 방식", tag: "한국사", dotColor: "#7c2d12" },
+  { title: "은유와 상징이 시의 의미를 만드는 방법", tag: "국어/문학", dotColor: "#9333ea" },
+  { title: "가정법으로 상상을 표현하는 영어 문장", tag: "영어/문법", dotColor: "#0ea5e9" },
 ];
 
 export const ICON_KEYS = [
@@ -271,7 +304,22 @@ export const RESOLUTIONS = [
   { id: "hd", label: "고속 720p", width: 1280, height: 720 },
 ] as const;
 
+export const VERTICAL_RESOLUTIONS = [
+  { id: "fhd", label: "FHD 1080p (세로)", width: 1080, height: 1920 },
+  { id: "hd", label: "고속 720p (세로)", width: 720, height: 1280 },
+] as const;
+
 export type ResolutionId = (typeof RESOLUTIONS)[number]["id"];
+
+export function resolutionPreset(
+  resolution: ResolutionId,
+  aspect: "16:9" | "9:16",
+): (typeof RESOLUTIONS)[number] | (typeof VERTICAL_RESOLUTIONS)[number] {
+  if (aspect === "9:16") {
+    return VERTICAL_RESOLUTIONS.find((item) => item.id === resolution) ?? VERTICAL_RESOLUTIONS[0];
+  }
+  return RESOLUTIONS.find((item) => item.id === resolution) ?? RESOLUTIONS[0];
+}
 
 export const APP_NAME = "판서랩";
 export const APP_TAGLINE = "교육용 화이트보드 영상 만들기";

@@ -1,7 +1,9 @@
 import { AlertCircle, CheckCircle2, Info, X } from "lucide-react";
 import { useStudioStore } from "../store/studioStore";
+import { useI18n } from "../lib/i18n";
 
 export function Toasts() {
+  const { t } = useI18n();
   const toasts = useStudioStore((state) => state.toasts);
   const dismiss = useStudioStore((state) => state.dismissToast);
 
@@ -17,7 +19,7 @@ export function Toasts() {
             <Info size={17} />
           )}
           <span>{toast.message}</span>
-          <button type="button" onClick={() => dismiss(toast.id)} aria-label="알림 닫기">
+          <button type="button" onClick={() => dismiss(toast.id)} aria-label={t("toast.dismiss")}>
             <X size={14} />
           </button>
         </div>

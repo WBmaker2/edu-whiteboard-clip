@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type {
+  AspectRatio,
+  AssetMeta,
   LayoutStyle,
   Project,
   Scene,
@@ -10,6 +12,8 @@ import type {
 } from "../types/project";
 import { SETTINGS_KEY } from "../data/presets";
 import { uid } from "../lib/time";
+import type { Language } from "../lib/i18n";
+import { blobUrlFor } from "../lib/blobUrls";
 import {
   emptyHistory,
   pushHistory,
@@ -41,12 +45,17 @@ export interface Toast {
 }
 
 export interface StudioState {
+  language: Language;
   apiKey: string;
   rememberKey: boolean;
   topic: string;
   themeId: ThemeId;
   visualStyle: VisualStyle;
   layoutStyle: LayoutStyle;
+  aspect: AspectRatio;
+  gradeLevel: string;
+  subject: string;
+  standards: string;
   model: string;
   ttsModel: string;
   voice: string;
@@ -66,8 +75,6 @@ export interface StudioState {
   progressPercent: number;
   progressMessage: string;
   activeSceneIndex: number;
-  currentTime: number;
-  isPlaying: boolean;
   autosaveState: AutosaveState;
   lastSavedAt: string | null;
   draftAvailable: boolean;
@@ -78,9 +85,16 @@ export interface StudioState {
   quizOpen: boolean;
   materialsOpen: boolean;
   historyOpen: boolean;
+  setLanguage: (language: Language) => void;
   setApiKey: (value: string) => void;
   setRememberKey: (value: boolean) => void;
   patch: (partial: Partial<StudioState>) => void;
+  setTheme: (themeId: ThemeId) => void;
+  setVisualStyle: (visualStyle: VisualStyle) => void;
+  setLayoutStyle: (layoutStyle: LayoutStyle) => void;
+  setAspect: (aspect: AspectRatio) => void;
+  setBgmId: (bgmId: string) => void;
+  addAsset: (asset: AssetMeta) => void;
   setProject: (project: Project | null) => void;
   loadProject: (project: Project) => void;
   applyEdit: (mutator: (project: Project) => Project) => void;
@@ -127,13 +141,32 @@ const defaultTopic = "광합성이 빛을 양분으로 바꾸는 과정";
 
 export const useStudioStore = create<StudioState>()(
   persist(
-    (set, get) => ({
-      apiKey: "",
+    (set, get) => {
+      const syncProjectField = <
+        K extends "themeId" | "visualStyle" | "layoutStyle" | "aspect" | "bgmId",
+      >(
+        key: K,
+        value: Project[K],
+      ) => {
+        set({ [key]: value } as unknown as Partial<StudioState>);
+        const current = get().project;
+        if (!current || current[key] === value) return;
+        get().applyEdit((project) =>
+          project[key] === value ? project : { ...project, [key]: value },
+        );
+      };
+      return {
+        language: "ko",
+        apiKey: "",
       rememberKey: false,
       topic: defaultTopic,
       themeId: "paper",
       visualStyle: "diagram",
       layoutStyle: "adaptive",
+      aspect: "16:9",
+      gradeLevel: "",
+      subject: "",
+      standards: "",
       model: "gemini-3.8-flash",
       ttsModel: "gemini-3.8-flash-tts",
       voice: "Kore",
@@ -153,8 +186,6 @@ export const useStudioStore = create<StudioState>()(
       progressPercent: 0,
       progressMessage: "",
       activeSceneIndex: 0,
-      currentTime: 0,
-      isPlaying: false,
       autosaveState: "idle",
       lastSavedAt: null,
       draftAvailable: false,
@@ -165,15 +196,36 @@ export const useStudioStore = create<StudioState>()(
       quizOpen: false,
       materialsOpen: false,
       historyOpen: false,
+      setLanguage: (language) => set({ language }),
       setApiKey: (value) => set({ apiKey: value }),
       setRememberKey: (value) => set({ rememberKey: value }),
       patch: (partial) => set(partial),
+      setTheme: (themeId) => syncProjectField("themeId", themeId),
+      setVisualStyle: (visualStyle) => syncProjectField("visualStyle", visualStyle),
+      setLayoutStyle: (layoutStyle) => syncProjectField("layoutStyle", layoutStyle),
+      setAspect: (aspect) => syncProjectField("aspect", aspect),
+      setBgmId: (bgmId) => syncProjectField("bgmId", bgmId),
+      addAsset: (asset) => {
+        const project = get().project;
+        if (!project) return;
+        const withUrl: AssetMeta = {
+          ...asset,
+          url: asset.url ?? blobUrlFor(asset.blob),
+        };
+        set({
+          project: {
+            ...project,
+            assets: { ...project.assets, [asset.id]: withUrl },
+          },
+        });
+      },
       loadProject: (project) =>
         set({
           topic: project.topic,
           themeId: project.themeId,
           visualStyle: project.visualStyle,
           layoutStyle: project.layoutStyle,
+          aspect: project.aspect ?? "16:9",
           voice: project.voice,
           model: project.model,
           ttsModel: project.ttsModel,
@@ -184,8 +236,6 @@ export const useStudioStore = create<StudioState>()(
           progressPercent: 0,
           progressMessage: "",
           activeSceneIndex: 0,
-          currentTime: 0,
-          isPlaying: false,
           autosaveState: "idle",
           translations: {},
           draftAvailable: false,
@@ -198,8 +248,6 @@ export const useStudioStore = create<StudioState>()(
           progressPercent: 0,
           progressMessage: "",
           activeSceneIndex: 0,
-          currentTime: 0,
-          isPlaying: false,
           autosaveState: "idle",
           translations: {},
           draftAvailable: false,
@@ -271,6 +319,11 @@ export const useStudioStore = create<StudioState>()(
           translations: {},
           autosaveState: "saving",
           activeSceneIndex: Math.min(get().activeSceneIndex, result.project.scenes.length - 1),
+          themeId: result.project.themeId,
+          visualStyle: result.project.visualStyle,
+          layoutStyle: result.project.layoutStyle,
+          aspect: result.project.aspect ?? "16:9",
+          bgmId: result.project.bgmId,
         });
       },
       redo: () => {
@@ -284,6 +337,11 @@ export const useStudioStore = create<StudioState>()(
           translations: {},
           autosaveState: "saving",
           activeSceneIndex: Math.min(get().activeSceneIndex, result.project.scenes.length - 1),
+          themeId: result.project.themeId,
+          visualStyle: result.project.visualStyle,
+          layoutStyle: result.project.layoutStyle,
+          aspect: result.project.aspect ?? "16:9",
+          bgmId: result.project.bgmId,
         });
       },
       setProgress: (progressPercent, progressMessage) =>
@@ -319,19 +377,23 @@ export const useStudioStore = create<StudioState>()(
           progressPercent: 0,
           progressMessage: "",
           activeSceneIndex: 0,
-          currentTime: 0,
-          isPlaying: false,
           autosaveState: "idle",
           translations: {},
         }),
-    }),
+      };
+    },
     {
       name: SETTINGS_KEY,
       partialize: (state) => ({
+        language: state.language,
         topic: state.topic,
         themeId: state.themeId,
         visualStyle: state.visualStyle,
         layoutStyle: state.layoutStyle,
+        aspect: state.aspect,
+        gradeLevel: state.gradeLevel,
+        subject: state.subject,
+        standards: state.standards,
         model: state.model,
         ttsModel: state.ttsModel,
         voice: state.voice,

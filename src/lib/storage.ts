@@ -1,15 +1,27 @@
 import { createStore, del, get, set } from "idb-keyval";
-import type { DraftSnapshot, Project } from "../types/project";
+import type { AssetMeta, DraftSnapshot, Project } from "../types/project";
 import { DB_NAME, DRAFT_KEY } from "../data/presets";
-import { audioUrlFor } from "./audioUrls";
+import { blobUrlFor } from "./blobUrls";
+import { migrateStoredProject } from "./migrations";
 
 const store = createStore(DB_NAME, "projects");
 const HISTORY_KEY = "draft:history";
 const SNAPSHOT_LIMIT = 10;
 
+function stripAssetUrls(
+  assets: Record<string, AssetMeta>,
+): Record<string, AssetMeta> {
+  const next: Record<string, AssetMeta> = {};
+  for (const [id, asset] of Object.entries(assets ?? {})) {
+    next[id] = { ...asset, url: undefined };
+  }
+  return next;
+}
+
 function stripUrls(project: Project): Project {
   return {
     ...project,
+    assets: stripAssetUrls(project.assets ?? {}),
     scenes: project.scenes.map((scene) => ({
       ...scene,
       audioUrl: undefined,
@@ -19,7 +31,7 @@ function stripUrls(project: Project): Project {
 
 function stripAudio(project: Project): Project {
   return {
-    ...project,
+    ...stripUrls(project),
     scenes: project.scenes.map((scene) => ({
       ...scene,
       audioBlob: undefined,
@@ -31,13 +43,21 @@ function stripAudio(project: Project): Project {
 }
 
 function hydrateUrls(project: Project): Project {
+  const assets: Record<string, AssetMeta> = {};
+  for (const [id, asset] of Object.entries(project.assets ?? {})) {
+    assets[id] = {
+      ...asset,
+      url: asset.blob ? blobUrlFor(asset.blob) : undefined,
+    };
+  }
   return {
     ...project,
+    assets,
     scenes: project.scenes.map((scene) => ({
       ...scene,
       audioUrl:
         scene.audioBlob && scene.audioSource !== "none"
-          ? audioUrlFor(scene.audioBlob)
+          ? blobUrlFor(scene.audioBlob)
           : undefined,
     })),
   };
@@ -50,7 +70,7 @@ export async function saveDraft(project: Project): Promise<void> {
 export async function loadDraft(): Promise<Project | null> {
   const stored = await get<Project>(DRAFT_KEY, store);
   if (!stored) return null;
-  return hydrateUrls(stored);
+  return hydrateUrls(migrateStoredProject(stored));
 }
 
 export async function hasDraft(): Promise<boolean> {
@@ -98,7 +118,7 @@ export async function restoreSnapshot(id: string): Promise<Project | null> {
   const snapshots = await listSnapshots();
   const snapshot = snapshots.find((item) => item.id === id);
   if (!snapshot) return null;
-  return hydrateUrls(snapshot.project);
+  return hydrateUrls(migrateStoredProject(snapshot.project));
 }
 
 export async function deleteSnapshot(id: string): Promise<DraftSnapshot[]> {

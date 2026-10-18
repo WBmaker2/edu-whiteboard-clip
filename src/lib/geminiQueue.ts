@@ -3,6 +3,11 @@ export interface GeminiQueueOptions {
   minIntervalMs?: number;
 }
 
+export interface GeminiRunOptions {
+  timeoutMs?: number;
+  signal?: AbortSignal;
+}
+
 /**
  * Serializes Gemini requests so free-tier keys stay inside a conservative
  * request budget. Requests start at most `maxConcurrent` at a time and never
@@ -29,15 +34,68 @@ export class GeminiQueue {
     return this.waiting.length;
   }
 
-  run<T>(task: () => Promise<T>): Promise<T> {
+  run<T>(
+    task: (signal: AbortSignal) => Promise<T>,
+    options: GeminiRunOptions = {},
+  ): Promise<T> {
     return new Promise<T>((resolve, reject) => {
       this.waiting.push(() => {
+        if (options.signal?.aborted) {
+          reject(abortError(options.signal.reason));
+          this.pump();
+          return;
+        }
         this.active += 1;
         this.lastStart = Date.now();
-        Promise.resolve()
-          .then(task)
-          .then(resolve, reject)
+        const controller = new AbortController();
+        let timedOut = false;
+        let timer: ReturnType<typeof setTimeout> | null = null;
+        const onExternalAbort = () => {
+          controller.abort(options.signal?.reason);
+        };
+        if (options.signal) {
+          options.signal.addEventListener("abort", onExternalAbort, { once: true });
+        }
+        const cleanup = () => {
+          if (timer !== null) clearTimeout(timer);
+          options.signal?.removeEventListener("abort", onExternalAbort);
+        };
+
+        const taskPromise = Promise.resolve().then(() => task(controller.signal));
+        const timeoutMs = options.timeoutMs ?? 0;
+        const timeoutPromise =
+          timeoutMs > 0
+            ? new Promise<never>((_, rejectTimeout) => {
+                timer = setTimeout(() => {
+                  timedOut = true;
+                  const error = new DOMException(
+                    `Gemini 요청이 ${Math.round(timeoutMs / 1000)}초 안에 끝나지 않아 중단했습니다.`,
+                    "TimeoutError",
+                  );
+                  controller.abort(error);
+                  rejectTimeout(error);
+                }, timeoutMs);
+              })
+            : null;
+
+        const attempt = timeoutPromise
+          ? Promise.race([taskPromise, timeoutPromise])
+          : taskPromise;
+        attempt
+          .then(resolve, (error) => {
+            if (timedOut && !(error instanceof DOMException && error.name === "TimeoutError")) {
+              reject(
+                new DOMException(
+                  `Gemini 요청이 ${Math.round(timeoutMs / 1000)}초 안에 끝나지 않아 중단했습니다.`,
+                  "TimeoutError",
+                ),
+              );
+              return;
+            }
+            reject(error);
+          })
           .finally(() => {
+            cleanup();
             this.active -= 1;
             this.pump();
           });
@@ -65,6 +123,11 @@ export class GeminiQueue {
       this.pump();
     }, delay);
   }
+}
+
+function abortError(reason?: unknown): DOMException {
+  if (reason instanceof DOMException) return reason;
+  return new DOMException("Request cancelled", "AbortError");
 }
 
 export function retryAfterMs(response: Response): number | null {

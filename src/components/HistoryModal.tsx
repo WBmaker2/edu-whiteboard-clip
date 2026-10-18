@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Clock3, Database, History, Loader2, RotateCcw, Trash2 } from "lucide-react";
 import type { DraftSnapshot } from "../types/project";
+import { useShallow } from "zustand/react/shallow";
 import { useStudioStore } from "../store/studioStore";
 import {
   deleteSnapshot,
@@ -9,24 +10,33 @@ import {
   restoreSnapshot,
 } from "../lib/storage";
 import { Modal } from "./Modal";
+import { useI18n } from "../lib/i18n";
 
 interface HistoryModalProps {
   open: boolean;
   onClose: () => void;
 }
 
-function relativeTime(iso: string): string {
+type Translate = (key: string, params?: Record<string, string | number>) => string;
+
+function relativeTime(iso: string, t: Translate): string {
   const diff = Date.now() - new Date(iso).getTime();
   const minutes = Math.floor(diff / 60000);
-  if (minutes < 1) return "방금 전";
-  if (minutes < 60) return `${minutes}분 전`;
+  if (minutes < 1) return t("history.justNow");
+  if (minutes < 60) return t("history.minutesAgo", { count: minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}시간 전`;
-  return `${Math.floor(hours / 24)}일 전`;
+  if (hours < 24) return t("history.hoursAgo", { count: hours });
+  return t("history.daysAgo", { count: Math.floor(hours / 24) });
 }
 
 export function HistoryModal({ open, onClose }: HistoryModalProps) {
-  const store = useStudioStore();
+  const { t } = useI18n();
+  const store = useStudioStore(
+    useShallow((state) => ({
+      loadProject: state.loadProject,
+      pushToast: state.pushToast,
+    })),
+  );
   const [snapshots, setSnapshots] = useState<DraftSnapshot[]>([]);
   const [loading, setLoading] = useState(false);
   const [restoring, setRestoring] = useState<string | null>(null);
@@ -48,16 +58,18 @@ export function HistoryModal({ open, onClose }: HistoryModalProps) {
     try {
       const project = await restoreSnapshot(id);
       if (!project) {
-        store.pushToast("error", "저장 기록을 찾지 못했습니다.");
+        store.pushToast("error", t("history.notFound"));
         return;
       }
       store.loadProject(project);
-      store.pushToast("success", "저장 기록을 복원했습니다.");
+      store.pushToast("success", t("history.restored"));
       onClose();
     } catch (error) {
       store.pushToast(
         "error",
-        error instanceof Error ? `복원에 실패했습니다: ${error.message}` : "복원에 실패했습니다.",
+        error instanceof Error
+          ? t("history.restoreFailedReason", { message: error.message })
+          : t("history.restoreFailed"),
       );
     } finally {
       setRestoring(null);
@@ -67,7 +79,7 @@ export function HistoryModal({ open, onClose }: HistoryModalProps) {
   const remove = async (id: string) => {
     const next = await deleteSnapshot(id);
     setSnapshots(next);
-    store.pushToast("info", "저장 기록을 삭제했습니다.");
+    store.pushToast("info", t("history.deleted"));
   };
 
   const usagePercent =
@@ -79,15 +91,15 @@ export function HistoryModal({ open, onClose }: HistoryModalProps) {
     <Modal
       open={open}
       onClose={onClose}
-      title="저장 기록"
-      subtitle="자동 저장본과 수동 스냅샷을 복원할 수 있습니다."
+      title={t("history.title")}
+      subtitle={t("history.subtitle")}
       icon={<History size={19} />}
       actions={
-        <span className="budget-chip" title="브라우저 저장 공간 사용량">
+        <span className="budget-chip" title={t("history.usageTitle")}>
           <Database size={12} />
           {usagePercent !== null
-            ? `저장 공간 ${usagePercent}% 사용`
-            : "브라우저에 저장됨"}
+            ? t("history.usage", { percent: usagePercent })
+            : t("history.savedInBrowser")}
         </span>
       }
     >
@@ -95,12 +107,12 @@ export function HistoryModal({ open, onClose }: HistoryModalProps) {
         {loading ? (
           <div className="history-empty">
             <Loader2 size={22} className="spin" />
-            <p>저장 기록을 불러오는 중...</p>
+            <p>{t("history.loading")}</p>
           </div>
         ) : snapshots.length === 0 ? (
           <div className="history-empty">
             <Clock3 size={22} />
-            <p>아직 저장 기록이 없습니다. 편집하면 자동 저장되고, 중요한 지점은 스냅샷으로 남길 수 있습니다.</p>
+            <p>{t("history.empty")}</p>
           </div>
         ) : (
           <div className="history-list">
@@ -112,8 +124,8 @@ export function HistoryModal({ open, onClose }: HistoryModalProps) {
                 <div className="history-meta">
                   <strong>{snapshot.label}</strong>
                   <small>
-                    {relativeTime(snapshot.savedAt)} · {snapshot.sceneCount}씬
-                    {snapshot.includesAudio ? " · 오디오 포함" : " · 오디오 제외"}
+                    {relativeTime(snapshot.savedAt, t)} · {t("history.scenes", { count: snapshot.sceneCount })}
+                    {snapshot.includesAudio ? ` · ${t("history.withAudio")}` : ` · ${t("history.withoutAudio")}`}
                   </small>
                 </div>
                 <button
@@ -127,13 +139,13 @@ export function HistoryModal({ open, onClose }: HistoryModalProps) {
                   ) : (
                     <RotateCcw size={12} />
                   )}
-                  복원
+                  {t("history.restore")}
                 </button>
                 <button
                   type="button"
                   className="icon-button tiny is-danger"
                   onClick={() => void remove(snapshot.id)}
-                  aria-label="저장 기록 삭제"
+                  aria-label={t("history.delete")}
                 >
                   <Trash2 size={13} />
                 </button>
@@ -141,9 +153,7 @@ export function HistoryModal({ open, onClose }: HistoryModalProps) {
             ))}
           </div>
         )}
-        <p className="editor-note">
-          자동 저장은 편집 후 약 1.5초 뒤에 이루어지며, 중요한 변경 전에는 오디오 포함 스냅샷이 만들어집니다.
-        </p>
+        <p className="editor-note">{t("history.note")}</p>
       </div>
     </Modal>
   );

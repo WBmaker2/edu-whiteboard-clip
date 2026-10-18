@@ -9,6 +9,7 @@ import {
   storyboardPrompt,
   type SceneSeed,
 } from "./storyboard";
+import type { CurriculumContext } from "../data/curriculum";
 import {
   base64ToBytes,
   computeWindowsFromPcm,
@@ -54,7 +55,11 @@ export interface GeminiCallOptions {
   fallbacks: string[];
   body: unknown;
   onFallback?: (model: string) => void;
+  timeoutMs?: number;
+  signal?: AbortSignal;
 }
+
+const DEFAULT_TIMEOUT_MS = 120_000;
 
 export async function callGemini({
   apiKey,
@@ -62,6 +67,8 @@ export async function callGemini({
   fallbacks,
   body,
   onFallback,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+  signal,
 }: GeminiCallOptions): Promise<{ data: any; modelUsed: string }> {
   const key = apiKey.trim();
   if (!key) throw new Error("Gemini API 키를 입력해 주세요.");
@@ -75,20 +82,24 @@ export async function callGemini({
     const attempts = isPrimary ? 3 : 2;
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
       try {
-        const response = await geminiQueue.run(() => {
-          recordCall();
-          return fetch(
-            `${API_ROOT}/models/${encodeURIComponent(current)}:generateContent`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "x-goog-api-key": key,
+        const response = await geminiQueue.run(
+          (queueSignal) => {
+            recordCall();
+            return fetch(
+              `${API_ROOT}/models/${encodeURIComponent(current)}:generateContent`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "x-goog-api-key": key,
+                },
+                body: JSON.stringify(body),
+                signal: queueSignal,
               },
-              body: JSON.stringify(body),
-            },
-          );
-        });
+            );
+          },
+          { timeoutMs, signal },
+        );
         if (response.ok) {
           const data = await response.json();
           if (!isPrimary) onFallback?.(current);
@@ -122,6 +133,12 @@ export async function callGemini({
         }
         throw new Error(`Gemini API 오류 (${current}): ${message}`);
       } catch (error) {
+        if (
+          error instanceof DOMException &&
+          (error.name === "AbortError" || error.name === "TimeoutError")
+        ) {
+          throw error;
+        }
         const message = redactKey(
           error instanceof Error ? error.message : String(error),
           key,
@@ -148,9 +165,14 @@ export async function callGemini({
 export async function checkApiKey(apiKey: string): Promise<{ ok: boolean; message: string }> {
   const key = apiKey.trim();
   if (!key) return { ok: false, message: "API 키를 입력해 주세요." };
+  const timeoutSignal =
+    typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
+      ? AbortSignal.timeout(15_000)
+      : undefined;
   try {
     const response = await fetch(`${API_ROOT}/models?pageSize=1`, {
       headers: { "x-goog-api-key": key },
+      signal: timeoutSignal,
     });
     if (response.ok) {
       return { ok: true, message: "API 키가 유효합니다. 영상 생성을 시작할 수 있어요." };
@@ -167,6 +189,15 @@ export async function checkApiKey(apiKey: string): Promise<{ ok: boolean; messag
       )}`,
     };
   } catch (error) {
+    if (
+      error instanceof DOMException &&
+      (error.name === "TimeoutError" || error.name === "AbortError")
+    ) {
+      return {
+        ok: false,
+        message: "키 확인 요청이 시간 안에 끝나지 않았습니다. 네트워크 상태를 확인한 뒤 다시 시도해 주세요.",
+      };
+    }
     return {
       ok: false,
       message: `네트워크 오류로 키를 확인하지 못했습니다: ${redactKey(
@@ -181,15 +212,18 @@ export async function generateStoryboard(options: {
   apiKey: string;
   topic: string;
   model: string;
+  curriculum?: CurriculumContext;
   onFallback?: (model: string) => void;
+  signal?: AbortSignal;
 }): Promise<{ scenes: Scene[]; modelUsed: string }> {
   const { data, modelUsed } = await callGemini({
     apiKey: options.apiKey,
     model: options.model,
     fallbacks: MODEL_FALLBACKS,
     onFallback: options.onFallback,
+    signal: options.signal,
     body: {
-      contents: [{ parts: [{ text: storyboardPrompt(options.topic) }] }],
+      contents: [{ parts: [{ text: storyboardPrompt(options.topic, options.curriculum) }] }],
       generationConfig: {
         responseMimeType: "application/json",
         temperature: 0.75,
@@ -222,12 +256,15 @@ export async function synthesizeNarration(options: {
   voice: string;
   ttsModel: string;
   onFallback?: (model: string) => void;
+  signal?: AbortSignal;
 }): Promise<TtsResult> {
   const { data, modelUsed } = await callGemini({
     apiKey: options.apiKey,
     model: options.ttsModel,
     fallbacks: TTS_FALLBACKS,
     onFallback: options.onFallback,
+    timeoutMs: 180_000,
+    signal: options.signal,
     body: {
       contents: [
         {
@@ -267,6 +304,7 @@ export async function translateNarrations(options: {
   scenes: Scene[];
   lang: string;
   onFallback?: (model: string) => void;
+  signal?: AbortSignal;
 }): Promise<string[][]> {
   const payload = options.scenes.map((scene, index) => ({
     sceneIndex: index,
@@ -277,6 +315,7 @@ export async function translateNarrations(options: {
     model: options.model,
     fallbacks: MODEL_FALLBACKS,
     onFallback: options.onFallback,
+    signal: options.signal,
     body: {
       contents: [
         {

@@ -1,7 +1,9 @@
 import { useEffect, useRef } from "react";
+import { useShallow } from "zustand/react/shallow";
 import {
   Camera,
   Captions,
+  Link2,
   Clapperboard,
   FileJson,
   Image,
@@ -11,6 +13,7 @@ import {
   PlayCircle,
   Presentation,
   Redo2,
+  PenLine,
   Save,
   Sparkles,
   ClipboardList,
@@ -22,9 +25,11 @@ import {
 import type { Project } from "../types/project";
 import { useStudioStore } from "../store/studioStore";
 import { usePlayback } from "../hooks/usePlayback";
+import { useAssetImages } from "../hooks/useAssetImages";
+import { useI18n } from "../lib/i18n";
 import { PlayerControls } from "./PlayerControls";
 import { StoryboardList } from "./StoryboardList";
-import { renderPoster, CANVAS_HEIGHT, CANVAS_WIDTH } from "../lib/renderer";
+import { canvasProfile, renderPoster } from "../lib/renderer";
 import { THEMES } from "../data/presets";
 import type { RecordedResult } from "../hooks/useRecorder";
 
@@ -36,11 +41,13 @@ interface MonitorPanelProps {
   onExportJson: () => void;
   onSnapshot: (canvas: HTMLCanvasElement, sceneIndex: number) => void;
   onExportSrt: () => void;
+  onExportSvg: () => void;
   onOpenPresentation: () => void;
   onOpenWorksheet: () => void;
   onOpenQuiz: () => void;
   onOpenMaterials: () => void;
   onExportVideo: () => void;
+  onShareLink: () => void;
   onRegenerate: (index: number) => Promise<void>;
   onRecorded: (index: number, result: RecordedResult) => void;
   onLanguageChange: (code: string) => void;
@@ -55,33 +62,79 @@ export function MonitorPanel({
   onExportJson,
   onSnapshot,
   onExportSrt,
+  onExportSvg,
   onOpenPresentation,
   onOpenWorksheet,
   onOpenQuiz,
   onOpenMaterials,
   onExportVideo,
+  onShareLink,
   onRegenerate,
   onRecorded,
   onLanguageChange,
 }: MonitorPanelProps) {
-  const store = useStudioStore();
+  const { t } = useI18n();
+  const store = useStudioStore(
+    useShallow((state) => ({
+      themeId: state.themeId,
+      visualStyle: state.visualStyle,
+      layoutStyle: state.layoutStyle,
+      aspect: state.aspect,
+      captions: state.captions,
+      captionLang: state.captionLang,
+      translations: state.translations,
+      bgmId: state.bgmId,
+      bgmVolume: state.bgmVolume,
+      sfx: state.sfx,
+      penTip: state.penTip,
+      resolution: state.resolution,
+      exportFormat: state.exportFormat,
+      phase: state.phase,
+      progressPercent: state.progressPercent,
+      progressMessage: state.progressMessage,
+      autosaveState: state.autosaveState,
+      lastSavedAt: state.lastSavedAt,
+      canUndo: state.history.past.length > 0,
+      canRedo: state.history.future.length > 0,
+      patch: state.patch,
+      addScene: state.addScene,
+      openModal: state.openModal,
+      undo: state.undo,
+      redo: state.redo,
+      pushToast: state.pushToast,
+    })),
+  );
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const sceneTabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const assetImages = useAssetImages(project);
+  const profile = canvasProfile(store.aspect);
   const options = {
     themeId: store.themeId,
     visualStyle: store.visualStyle,
     layoutStyle: store.layoutStyle,
+    aspect: store.aspect,
     captions: store.captions,
     captionLang: store.captionLang,
     translations: store.translations,
     bgmId: store.bgmId,
     bgmVolume: store.bgmVolume,
     sfx: store.sfx,
+    penTip: store.penTip,
+    assetImages,
+    onRenderError: (error: unknown) => {
+      store.pushToast(
+        "error",
+        error instanceof Error
+          ? t("monitor.renderErrorReason", { message: error.message })
+          : t("monitor.renderError"),
+      );
+    },
   };
   const playback = usePlayback(project, options, canvasRef);
   const theme = THEMES[store.themeId] ?? THEMES.paper;
   const isGenerating = store.phase === "generating";
-  const canUndo = store.history.past.length > 0;
-  const canRedo = store.history.future.length > 0;
+  const canUndo = store.canUndo;
+  const canRedo = store.canRedo;
 
   useEffect(() => {
     if (project) return;
@@ -89,8 +142,8 @@ export function MonitorPanel({
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    renderPoster(ctx, store.themeId);
-  }, [project, store.themeId]);
+    renderPoster(ctx, store.themeId, store.aspect);
+  }, [project, store.themeId, store.aspect]);
 
   useEffect(() => {
     if (useStudioStore.getState().activeSceneIndex !== playback.activeScene) {
@@ -135,17 +188,17 @@ export function MonitorPanel({
           <div className="monitor-title">
             <span className="panel-label">
               <MonitorUp size={15} />
-              교육 영상 모니터
+              {t("monitor.title")}
             </span>
             <span className="soft-chip">{theme.name}</span>
             {project && (
               <span className="soft-chip is-blue">
-                {project.scenes.length}씬 · {formatRuntime(playback.duration)}
+                {t("monitor.sceneCountLabel", { count: project.scenes.length })} · {formatRuntime(playback.duration)}
               </span>
             )}
           </div>
           <div className="monitor-tools">
-            <div className="resolution-toggle" aria-label="내보내기 해상도">
+            <div className="resolution-toggle" aria-label={t("monitor.resolution")}>
               <button
                 type="button"
                 className={store.resolution === "fhd" ? "is-active" : ""}
@@ -159,64 +212,72 @@ export function MonitorPanel({
                 onClick={() => store.patch({ resolution: "hd" })}
               >
                 <Sparkles size={12} />
-                고속 720p
+                {t("monitor.speed720")}
               </button>
             </div>
-            <button type="button" className="tool-button compact" onClick={() => canvasRef.current && onSnapshot(canvasRef.current, playback.activeScene)} disabled={!project} title="현재 장면을 PNG로 저장">
+            <button type="button" className="tool-button compact" onClick={() => canvasRef.current && onSnapshot(canvasRef.current, playback.activeScene)} disabled={!project} title={t("monitor.snapshotTitle")}>
               <Camera size={15} />
-              <span>스냅샷</span>
+              <span>{t("monitor.snapshot")}</span>
             </button>
-            <button type="button" className="tool-button compact" onClick={onExportSrt} disabled={!project} title="SRT 자막 저장">
+            <button type="button" className="tool-button compact" onClick={onExportSrt} disabled={!project} title={t("monitor.srtTitle")}>
               <Captions size={15} />
               <span>SRT</span>
             </button>
-            <button type="button" className="tool-button compact" onClick={onExportJson} disabled={!project} title="프로젝트 JSON 저장">
+            <button type="button" className="tool-button compact" onClick={onExportJson} disabled={!project} title={t("monitor.jsonTitle")}>
               <FileJson size={15} />
               <span>JSON</span>
             </button>
-            <button type="button" className="tool-button" onClick={onOpenMaterials} disabled={!project} title="썸네일과 카드뉴스 만들기">
+            <button type="button" className="tool-button compact" onClick={onExportSvg} disabled={!project} title={t("monitor.svgTitle")}>
+              <PenLine size={15} />
+              <span>SVG</span>
+            </button>
+            <button type="button" className="tool-button" onClick={onOpenMaterials} disabled={!project} title={t("monitor.materialsTitle")}>
               <Image size={15} />
-              <span>썸네일/카드</span>
+              <span>{t("monitor.materials")}</span>
             </button>
-            <button type="button" className="tool-button" onClick={onOpenPresentation} disabled={!project} title="교사용 발표 모드">
+            <button type="button" className="tool-button" onClick={onOpenPresentation} disabled={!project} title={t("monitor.presentationTitle")}>
               <Presentation size={15} />
-              <span>발표 모드</span>
+              <span>{t("monitor.presentation")}</span>
             </button>
-            <button type="button" className="tool-button" onClick={onOpenWorksheet} disabled={!project} title="A4 학습지">
+            <button type="button" className="tool-button" onClick={onOpenWorksheet} disabled={!project} title={t("monitor.worksheetTitle")}>
               <ClipboardList size={15} />
-              <span>A4 학습지</span>
+              <span>{t("monitor.worksheet")}</span>
             </button>
-            <button type="button" className="tool-button" onClick={onOpenQuiz} disabled={!project} title="AI 웹 퀴즈">
+            <button type="button" className="tool-button" onClick={onOpenQuiz} disabled={!project} title={t("monitor.quizTitle")}>
               <ListChecks size={15} />
-              <span>AI 퀴즈</span>
+              <span>{t("monitor.quiz")}</span>
             </button>
-            <label className="select-pill format-pill" title="내보내기 파일 형식">
+            <label className="select-pill format-pill" title={t("monitor.exportFormat")}>
               <Clapperboard size={14} />
               <select
                 value={store.exportFormat}
                 onChange={(event) =>
                   store.patch({ exportFormat: event.target.value as "webm" | "mp4" })
                 }
-                aria-label="내보내기 파일 형식"
+                aria-label={t("monitor.exportFormat")}
               >
                 <option value="webm">WebM</option>
                 <option value="mp4">MP4</option>
               </select>
             </label>
-            <button type="button" className="tool-button is-accent" onClick={onExportVideo} disabled={!project} title="영상 파일로 내보내기">
+            <button type="button" className="tool-button" onClick={onShareLink} disabled={!project} title={t("monitor.shareTitle")}>
+              <Link2 size={15} />
+              <span>{t("monitor.share")}</span>
+            </button>
+            <button type="button" className="tool-button is-accent" onClick={onExportVideo} disabled={!project} title={t("monitor.exportVideoTitle")}>
               <Clapperboard size={15} />
-              <span>비디오 내보내기</span>
+              <span>{t("monitor.exportVideo")}</span>
             </button>
           </div>
         </div>
 
-        <div className="canvas-frame">
+        <div className="canvas-frame" id="scene-stage" role="tabpanel" aria-label={t("monitor.scenePreview")}>
           <canvas
             ref={canvasRef}
-            width={CANVAS_WIDTH}
-            height={CANVAS_HEIGHT}
-            className="stage-canvas"
-            aria-label="화이트보드 영상 미리보기"
+            width={profile.width}
+            height={profile.height}
+            className={`stage-canvas ${store.aspect === "9:16" ? "is-vertical" : ""}`}
+            aria-label={t("monitor.preview")}
           />
           {isGenerating && (
             <div className="canvas-overlay">
@@ -229,7 +290,7 @@ export function MonitorPanel({
             <div className="poster-actions">
               <button type="button" className="primary-button poster-demo-button" onClick={onDemo}>
                 <PlayCircle size={16} />
-                예시 프로젝트로 시작하기
+                {t("monitor.demoStart")}
               </button>
             </div>
           )}
@@ -237,29 +298,60 @@ export function MonitorPanel({
 
         {project ? (
           <>
-            <div className="scene-tabs" role="tablist" aria-label="씬 선택">
-              {project.scenes.map((scene, index) => (
-                <button
-                  key={scene.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={playback.activeScene === index}
-                  className={`scene-tab ${playback.activeScene === index ? "is-active" : ""}`}
-                  onClick={() => playback.selectScene(index)}
-                >
-                  <span className="scene-tab-dot" />
-                  {index + 1}. {scene.type === "intro" ? "도입" : scene.type === "outro" ? "정리" : `전개 ${index}`}
-                </button>
-              ))}
+            <div className="scene-tabs">
+              <div className="scene-tablist" role="tablist" aria-label={t("monitor.sceneSelect")}>
+                {project.scenes.map((scene, index) => (
+                  <button
+                    key={scene.id}
+                    ref={(element) => {
+                      sceneTabRefs.current[index] = element;
+                    }}
+                    type="button"
+                    role="tab"
+                    id={`scene-tab-${index}`}
+                    aria-controls="scene-stage"
+                    aria-selected={playback.activeScene === index}
+                    tabIndex={playback.activeScene === index ? 0 : -1}
+                    className={`scene-tab ${playback.activeScene === index ? "is-active" : ""}`}
+                    onClick={() => playback.selectScene(index)}
+                    onKeyDown={(event) => {
+                      const last = project.scenes.length - 1;
+                      let target = -1;
+                      if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+                        target = Math.min(last, index + 1);
+                      } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+                        target = Math.max(0, index - 1);
+                      } else if (event.key === "Home") {
+                        target = 0;
+                      } else if (event.key === "End") {
+                        target = last;
+                      }
+                      if (target >= 0) {
+                        event.preventDefault();
+                        playback.selectScene(target);
+                        sceneTabRefs.current[target]?.focus();
+                      }
+                    }}
+                  >
+                    <span className="scene-tab-dot" />
+                    {index + 1}.{" "}
+                    {scene.type === "intro"
+                      ? t("storyboard.typeIntro")
+                      : scene.type === "outro"
+                        ? t("storyboard.typeOutro")
+                        : `${t("storyboard.typeBody")} ${index}`}
+                  </button>
+                ))}
+              </div>
               <button
                 type="button"
                 className="scene-tab scene-tab-add"
                 onClick={() => store.addScene(playback.activeScene)}
                 disabled={project.scenes.length >= 10}
-                title="장면 추가"
+                title={t("monitor.sceneAdd")}
               >
                 <Plus size={12} />
-                장면
+                {t("monitor.sceneAddShort")}
               </button>
             </div>
 
@@ -279,33 +371,33 @@ export function MonitorPanel({
 
             <div className="monitor-footer">
               <span className="scene-counter">
-                씬 <strong>{playback.activeScene + 1}</strong> / {project.scenes.length}
+                {t("monitor.sceneCounter")} <strong>{playback.activeScene + 1}</strong> / {project.scenes.length}
               </span>
               <div className="monitor-footer-actions">
                 <span className={`autosave-status is-${store.autosaveState}`}>
                   {store.autosaveState === "saving"
-                    ? "저장 중..."
+                    ? t("monitor.autosaveSaving")
                     : store.autosaveState === "error"
-                      ? "저장 실패"
+                      ? t("monitor.autosaveError")
                       : store.lastSavedAt
-                        ? `자동 저장됨 ${formatSavedTime(store.lastSavedAt)}`
-                        : "자동 저장 대기"}
+                        ? t("monitor.autosaveSaved", { time: formatSavedTime(store.lastSavedAt) })
+                        : t("monitor.autosaveIdle")}
                 </span>
                 <button
                   type="button"
                   className="mini-button"
                   onClick={() => store.openModal("history", true)}
-                  title="저장 기록"
+                  title={t("monitor.historyTitle")}
                 >
                   <History size={13} />
-                  기록
+                  {t("monitor.history")}
                 </button>
                 <button
                   type="button"
                   className="mini-button"
                   onClick={() => store.undo()}
                   disabled={!canUndo}
-                  title="실행 취소 (Ctrl/Cmd+Z)"
+                  title={t("monitor.undo")}
                 >
                   <Undo2 size={13} />
                 </button>
@@ -314,13 +406,13 @@ export function MonitorPanel({
                   className="mini-button"
                   onClick={() => store.redo()}
                   disabled={!canRedo}
-                  title="다시 실행 (Shift+Ctrl/Cmd+Z)"
+                  title={t("monitor.redo")}
                 >
                   <Redo2 size={13} />
                 </button>
                 <button type="button" className="mini-button" onClick={onSaveDraft}>
                   <Save size={13} />
-                  초안 저장
+                  {t("monitor.saveDraft")}
                 </button>
               </div>
             </div>
@@ -331,8 +423,8 @@ export function MonitorPanel({
               <LayoutList size={18} />
             </span>
             <div>
-              <strong>아직 만든 영상이 없습니다.</strong>
-              <p>왼쪽 스튜디오 설정에서 주제를 입력하거나 예시 프로젝트를 불러와 보세요.</p>
+              <strong>{t("monitor.emptyTitle")}</strong>
+              <p>{t("monitor.emptyBody")}</p>
             </div>
           </div>
         )}
@@ -343,29 +435,29 @@ export function MonitorPanel({
           <div className="panel-heading">
             <span className="panel-label">
               <Sparkles size={15} />
-              이렇게 만들어져요
+              {t("monitor.tipTitle")}
             </span>
-            <span className="panel-hint">3단계 제작 흐름</span>
+            <span className="panel-hint">{t("monitor.tipHint")}</span>
           </div>
           <div className="tip-flow">
-            <span><b>1</b> 수업 주제 입력</span>
+            <span><b>1</b> {t("monitor.tipStep1")}</span>
             <i />
-            <span><b>2</b> AI 스토리보드</span>
+            <span><b>2</b> {t("monitor.tipStep2")}</span>
             <i />
-            <span><b>3</b> 판서 영상 완성</span>
+            <span><b>3</b> {t("monitor.tipStep3")}</span>
           </div>
           <div className="tip-grid">
             <div>
-              <strong>AI 스토리보드</strong>
-              <p>5개 장면과 3개의 핵심 비트를 자동으로 설계합니다.</p>
+              <strong>{t("monitor.tipStoryboard")}</strong>
+              <p>{t("monitor.tipStoryboardDesc")}</p>
             </div>
             <div>
-              <strong>손그림 판서</strong>
-              <p>4가지 테마와 5가지 연출로 캔버스에 애니메이션을 그립니다.</p>
+              <strong>{t("monitor.tipSketch")}</strong>
+              <p>{t("monitor.tipSketchDesc")}</p>
             </div>
             <div>
-              <strong>수업 자료</strong>
-              <p>영상, 자막, 학습지, 퀴즈, 카드뉴스까지 한 번에 만듭니다.</p>
+              <strong>{t("monitor.tipMaterials")}</strong>
+              <p>{t("monitor.tipMaterialsDesc")}</p>
             </div>
           </div>
         </section>

@@ -170,7 +170,9 @@ export function createDemoProject(): Project {
   });
 
   return {
-    version: 1,
+    version: 2,
+    aspect: "16:9",
+    assets: {},
     topic: DEMO_TOPIC,
     themeId: "paper",
     visualStyle: "diagram",

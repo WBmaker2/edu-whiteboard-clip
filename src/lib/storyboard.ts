@@ -1,5 +1,6 @@
 import type { Beat, Scene, SceneType } from "../types/project";
 import { ICON_FALLBACK, ICON_KEYS } from "../data/presets";
+import { curriculumPromptBlock, type CurriculumContext } from "../data/curriculum";
 import { buildWindows, uid } from "./time";
 
 export interface SceneSeed {
@@ -9,10 +10,13 @@ export interface SceneSeed {
   beats: Omit<Beat, "id">[];
 }
 
-export function storyboardPrompt(topic: string): string {
+export function storyboardPrompt(
+  topic: string,
+  curriculum?: CurriculumContext,
+): string {
   return `You are an instructional designer creating a whiteboard explainer video for students.
 Write a complete, pedagogical lesson script as strict JSON for this topic: "${topic}".
-
+${curriculumPromptBlock(curriculum)}
 Lesson structure (5 scenes when possible):
 1. Scene 1 (intro): a hook question and the learning goal.
 2. Scene 2 (body): the foundational concept.

@@ -1,24 +1,53 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { ArrowUpRight, ShieldCheck, Sparkles } from "lucide-react";
+import { useShallow } from "zustand/react/shallow";
 import { HeaderTabs, type StudioTab } from "./components/HeaderTabs";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { MonitorPanel } from "./components/MonitorPanel";
-import { PresentationMode } from "./components/PresentationMode";
-import { WorksheetModal } from "./components/WorksheetModal";
-import { QuizModal } from "./components/QuizModal";
-import { MaterialsModal } from "./components/MaterialsModal";
-import { HelpModal } from "./components/HelpModal";
-import { VideoExportModal } from "./components/VideoExportModal";
-import { HistoryModal } from "./components/HistoryModal";
 import { Toasts } from "./components/Toasts";
+
+const PresentationMode = lazy(() =>
+  import("./components/PresentationMode").then((module) => ({
+    default: module.PresentationMode,
+  })),
+);
+const WorksheetModal = lazy(() =>
+  import("./components/WorksheetModal").then((module) => ({
+    default: module.WorksheetModal,
+  })),
+);
+const QuizModal = lazy(() =>
+  import("./components/QuizModal").then((module) => ({ default: module.QuizModal })),
+);
+const MaterialsModal = lazy(() =>
+  import("./components/MaterialsModal").then((module) => ({
+    default: module.MaterialsModal,
+  })),
+);
+const HelpModal = lazy(() =>
+  import("./components/HelpModal").then((module) => ({ default: module.HelpModal })),
+);
+const VideoExportModal = lazy(() =>
+  import("./components/VideoExportModal").then((module) => ({
+    default: module.VideoExportModal,
+  })),
+);
+const HistoryModal = lazy(() =>
+  import("./components/HistoryModal").then((module) => ({
+    default: module.HistoryModal,
+  })),
+);
 import { useStudioStore } from "./store/studioStore";
 import { createDemoProject } from "./data/demoProject";
-import { generateStoryboard, synthesizeNarration, translateNarrations } from "./lib/gemini";
+import { generateSceneAudio } from "./lib/narration";
 import { projectDuration } from "./lib/time";
 import type { Project, Scene } from "./types/project";
-import { buildSrt, downloadText } from "./lib/export/srt";
+import { buildSrt } from "./lib/export/srt";
 import { downloadProject, parseProjectJson } from "./lib/export/project";
 import { downloadCanvas } from "./lib/export/image";
+import { buildSceneSvg } from "./lib/export/svg";
+import { downloadText, sanitizeFileName } from "./lib/download";
+import { cancelFfmpegConversion, convertWebmToMp4, ffmpegConversionSupported } from "./lib/export/ffmpegConvert";
 import { exportVideo } from "./lib/export/video";
 import {
   createSnapshot,
@@ -27,10 +56,14 @@ import {
   loadDraft,
   saveDraft,
 } from "./lib/storage";
-import { audioUrlFor } from "./lib/audioUrls";
+import { blobUrlFor } from "./lib/blobUrls";
 import { isAudioStale, sceneTextHash } from "./lib/sceneOps";
+import { ensureExportFonts } from "./lib/fonts";
+import { useI18n } from "./lib/i18n";
 import type { RecordedResult } from "./hooks/useRecorder";
 import { CAPTION_LANGUAGES } from "./data/presets";
+import { SHARED_PROJECT_KEY } from "./components/ShareViewer";
+import { buildShareUrl, encodeSharedProject, MAX_SHARE_URL_LENGTH } from "./lib/share";
 
 interface ExportResult {
   url: string;
@@ -39,44 +72,46 @@ interface ExportResult {
 }
 
 export default function App() {
-  const store = useStudioStore();
+  const { t, language } = useI18n();
+  const store = useStudioStore(
+    useShallow((state) => ({
+      project: state.project,
+      draftAvailable: state.draftAvailable,
+      presentationOpen: state.presentationOpen,
+      worksheetOpen: state.worksheetOpen,
+      quizOpen: state.quizOpen,
+      materialsOpen: state.materialsOpen,
+      historyOpen: state.historyOpen,
+      activeSceneIndex: state.activeSceneIndex,
+      captionLang: state.captionLang,
+      translations: state.translations,
+      openModal: state.openModal,
+      pushToast: state.pushToast,
+      setDraftAvailable: state.setDraftAvailable,
+      setAutosaveState: state.setAutosaveState,
+      resetProject: state.resetProject,
+      loadProject: state.loadProject,
+    })),
+  );
   const [tab, setTab] = useState<StudioTab>("settings");
   const [helpOpen, setHelpOpen] = useState(false);
   const [translating, setTranslating] = useState(false);
+  const [converting, setConverting] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
   const [exportMessage, setExportMessage] = useState("");
   const [exportResult, setExportResult] = useState<ExportResult | null>(null);
   const [exportError, setExportError] = useState("");
   const exportAbortRef = useRef<AbortController | null>(null);
+  const generateAbortRef = useRef<AbortController | null>(null);
   const importRef = useRef<HTMLInputElement | null>(null);
   const project = store.project;
 
   useEffect(() => {
-    document.title = "교육용 화이트보드 영상 만들기";
-  }, []);
-
-  useEffect(() => {
-    const current = useStudioStore.getState().project;
-    if (!current) return;
-    if (
-      current.themeId === store.themeId &&
-      current.visualStyle === store.visualStyle &&
-      current.layoutStyle === store.layoutStyle &&
-      current.bgmId === store.bgmId
-    ) {
-      return;
-    }
-    useStudioStore.setState({
-      project: {
-        ...current,
-        themeId: store.themeId,
-        visualStyle: store.visualStyle,
-        layoutStyle: store.layoutStyle,
-        bgmId: store.bgmId,
-      },
-    });
-  }, [project, store.themeId, store.visualStyle, store.layoutStyle, store.bgmId]);
+    document.title = t("app.title");
+    document.documentElement.lang = language;
+    void ensureExportFonts();
+  }, [language, t]);
 
   useEffect(() => {
     if (!project) return;
@@ -104,6 +139,26 @@ export default function App() {
     }, 1500);
     return () => window.clearTimeout(timer);
   }, [project]);
+
+  useEffect(() => {
+    const raw = sessionStorage.getItem(SHARED_PROJECT_KEY);
+    if (!raw) return;
+    sessionStorage.removeItem(SHARED_PROJECT_KEY);
+    try {
+      store.loadProject(parseProjectJson(raw));
+      setTab("monitor");
+      store.pushToast(
+        "success",
+        "공유된 프로젝트를 가져왔습니다. 음성은 장면별 ‘음성 다시 만들기’로 재생성할 수 있습니다.",
+      );
+    } catch (error) {
+      store.pushToast(
+        "error",
+        error instanceof Error ? error.message : "공유 프로젝트를 가져오지 못했습니다.",
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -136,27 +191,6 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  const runWithConcurrency = async <T,>(
-    tasks: (() => Promise<T>)[],
-    limit: number,
-  ): Promise<PromiseSettledResult<T>[]> => {
-    const results: PromiseSettledResult<T>[] = new Array(tasks.length);
-    let cursor = 0;
-    const workers = Array.from({ length: Math.min(limit, tasks.length) }, async () => {
-      while (cursor < tasks.length) {
-        const index = cursor;
-        cursor += 1;
-        try {
-          results[index] = { status: "fulfilled", value: await tasks[index]() };
-        } catch (reason) {
-          results[index] = { status: "rejected", reason };
-        }
-      }
-    });
-    await Promise.all(workers);
-    return results;
-  };
-
   const handleGenerate = async () => {
     const state = useStudioStore.getState();
     if (!state.apiKey.trim()) {
@@ -169,14 +203,23 @@ export default function App() {
       setTab("settings");
       return;
     }
+    const controller = new AbortController();
+    generateAbortRef.current = controller;
     state.setPhase("generating");
     state.setProgress(4, "5개 씬 스토리보드를 설계하는 중...");
     let fallbackNotified = false;
     try {
+      const { generateStoryboard } = await import("./lib/gemini");
       const { scenes: generated, modelUsed } = await generateStoryboard({
         apiKey: state.apiKey,
         topic: state.topic,
         model: state.model,
+        curriculum: {
+          grade: state.gradeLevel,
+          subject: state.subject,
+          standards: state.standards,
+        },
+        signal: controller.signal,
         onFallback: (model) => {
           if (fallbackNotified) return;
           fallbackNotified = true;
@@ -189,14 +232,13 @@ export default function App() {
       if (state.generateWithAudio) state.setProgress(24, "스토리보드가 완성되었습니다. 나레이션을 합성하는 중...");
       else state.setProgress(60, "음성 없이 스토리보드를 저장하는 중...");
       const tasks = scenes.map((scene, index) => async () => {
-        const text = scene.beats.map((beat) => beat.narration).join(" ");
         try {
-          const result = await synthesizeNarration({
+          const result = await generateSceneAudio({
             apiKey: state.apiKey,
-            text,
-            beats: scene.beats,
             voice: state.voice,
             ttsModel: state.ttsModel,
+            beats: scene.beats,
+            signal: controller.signal,
             onFallback: (model) => {
               if (fallbackNotified) return;
               fallbackNotified = true;
@@ -206,11 +248,11 @@ export default function App() {
           scenes[index] = {
             ...scene,
             audioBlob: result.blob,
-            audioUrl: audioUrlFor(result.blob),
+            audioUrl: blobUrlFor(result.blob),
             audioTextHash: sceneTextHash(scene.beats),
             duration: result.duration,
             windows: result.windows,
-            audioSource: "tts",
+            audioSource: result.source,
           };
         } catch {
           ttsFailed = true;
@@ -224,12 +266,17 @@ export default function App() {
         }
       });
       if (state.generateWithAudio) {
-        await runWithConcurrency(tasks, 2);
+        await Promise.allSettled(tasks.map((task) => task()));
       } else {
         state.setProgress(90, "음성 없이 스토리보드를 준비했습니다.");
       }
+      if (controller.signal.aborted) {
+        throw new DOMException("Generation cancelled", "AbortError");
+      }
       const nextProject: Project = {
-        version: 1,
+        version: 2,
+        aspect: "16:9",
+        assets: {},
         topic: state.topic,
         themeId: state.themeId,
         visualStyle: state.visualStyle,
@@ -254,6 +301,12 @@ export default function App() {
       );
       setTab("monitor");
     } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        state.setPhase("idle");
+        state.setProgress(0, "");
+        state.pushToast("info", "생성을 취소했습니다.");
+        return;
+      }
       state.setPhase("idle");
       state.setProgress(0, "");
       state.pushToast(
@@ -261,7 +314,13 @@ export default function App() {
         error instanceof Error ? error.message : "영상 생성 중 문제가 발생했습니다.",
       );
       setTab("settings");
+    } finally {
+      generateAbortRef.current = null;
     }
+  };
+
+  const handleCancelGenerate = () => {
+    generateAbortRef.current?.abort();
   };
 
   const handleDemo = () => {
@@ -361,6 +420,22 @@ export default function App() {
     store.pushToast("success", "현재 장면을 PNG 이미지로 저장했습니다.");
   };
 
+  const handleExportSvg = () => {
+    const state = useStudioStore.getState();
+    const project = state.project;
+    if (!project) return;
+    const sceneIndex = Math.max(0, Math.min(project.scenes.length - 1, state.activeSceneIndex));
+    const scene = project.scenes[sceneIndex];
+    if (!scene) return;
+    const svg = buildSceneSvg(project, scene, sceneIndex);
+    downloadText(
+      `${sanitizeFileName(project.topic)}_scene${sceneIndex + 1}.svg`,
+      svg,
+      "image/svg+xml;charset=utf-8",
+    );
+    state.pushToast("success", "현재 장면을 SVG 벡터 시트로 저장했습니다. (간이 레이아웃)");
+  };
+
   const handleExportSrt = () => {
     if (!project) return;
     const translations =
@@ -396,6 +471,7 @@ export default function App() {
     const label = CAPTION_LANGUAGES.find((item) => item.code === code)?.label ?? code;
     state.pushToast("info", `${label} 자막을 번역하는 중...`);
     try {
+      const { translateNarrations } = await import("./lib/gemini");
       const narrations = await translateNarrations({
         apiKey: state.apiKey,
         model: state.model,
@@ -423,20 +499,14 @@ export default function App() {
       state.pushToast("error", "음성 재생성을 위해 Gemini API 키를 입력해 주세요.");
       return;
     }
-    const result = await synthesizeNarration({
+    const audio = await generateSceneAudio({
       apiKey: state.apiKey,
-      text: target.beats.map((beat) => beat.narration).join(" "),
-      beats: target.beats,
       voice: state.voice,
       ttsModel: state.ttsModel,
+      beats: target.beats,
       onFallback: (model) => state.pushToast("info", `TTS 모델을 ${model}로 자동 전환했습니다.`),
     });
-    state.replaceSceneAudio(index, {
-      blob: result.blob,
-      duration: result.duration,
-      windows: result.windows,
-      source: "tts",
-    });
+    state.replaceSceneAudio(index, audio);
     state.pushToast("success", `${index + 1}번째 씬의 나레이션을 다시 만들었습니다.`);
   }, []);
 
@@ -477,8 +547,10 @@ export default function App() {
         project: state.project,
         format: state.exportFormat,
         resolution: state.resolution,
+        aspect: state.project.aspect,
         captions: state.captions,
         bgmVolume: state.bgmVolume,
+        penTip: state.penTip,
         translations:
           state.captionLang !== "ko" ? state.translations[state.captionLang] : undefined,
         captionLang: state.captionLang,
@@ -492,12 +564,8 @@ export default function App() {
           setExportMessage(message);
         },
       });
-      const safeTopic = (state.project.topic || "whiteboard_lesson")
-        .replace(/[^\w\s가-힣-]/g, "")
-        .trim()
-        .replace(/\s+/g, "_")
-        .slice(0, 40);
-      const filename = `${safeTopic || "whiteboard_lesson"}_${Date.now()}.${result.extension}`;
+      const safeTopic = sanitizeFileName(state.project.topic);
+      const filename = `${safeTopic}_${Date.now()}.${result.extension}`;
       const url = URL.createObjectURL(result.blob);
       setExportResult({ url, filename, size: result.blob.size });
       setExportMessage("영상 파일이 준비되었습니다.");
@@ -524,7 +592,86 @@ export default function App() {
   };
 
   const handleCancelExport = () => {
+    if (converting) {
+      cancelFfmpegConversion();
+      return;
+    }
     exportAbortRef.current?.abort();
+  };
+
+  const handleConvertToMp4 = async () => {
+    if (!exportResult || converting) return;
+    const state = useStudioStore.getState();
+    setConverting(true);
+    setExportError("");
+    setExportProgress(2);
+    setExportMessage("ffmpeg 도구를 준비하는 중...");
+    try {
+      const response = await fetch(exportResult.url);
+      const webm = await response.blob();
+      const mp4 = await convertWebmToMp4(webm, {
+        onProgress: (percent, message) => {
+          setExportProgress(percent);
+          setExportMessage(message);
+        },
+      });
+      const filename = exportResult.filename.replace(/\.webm$/i, ".mp4");
+      const url = URL.createObjectURL(mp4);
+      setExportResult((previous) => {
+        if (previous) URL.revokeObjectURL(previous.url);
+        return { url, filename, size: mp4.size };
+      });
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      state.pushToast("success", "WebM을 MP4로 변환해 다운로드했습니다.");
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        state.pushToast("info", "MP4 변환을 취소했습니다.");
+      } else {
+        setExportError(
+          error instanceof Error ? error.message : "MP4 변환에 실패했습니다.",
+        );
+      }
+    } finally {
+      setConverting(false);
+    }
+  };
+
+  const handleShareLink = async () => {
+    const state = useStudioStore.getState();
+    if (!state.project) return;
+    try {
+      const encoded = await encodeSharedProject(state.project);
+      const url = buildShareUrl(
+        `${window.location.origin}${window.location.pathname}`,
+        encoded,
+      );
+      if (url.length > MAX_SHARE_URL_LENGTH) {
+        state.pushToast(
+          "info",
+          "프로젝트가 커서 링크로 공유할 수 없습니다. JSON 파일 공유를 사용해 주세요.",
+        );
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(url);
+        state.pushToast(
+          "success",
+          "공유 링크를 복사했습니다. (오디오·이미지 제외, 읽기 전용)",
+        );
+      } catch {
+        window.prompt("아래 링크를 복사해 공유하세요", url);
+      }
+    } catch (error) {
+      state.pushToast(
+        "error",
+        error instanceof Error ? error.message : "공유 링크를 만들지 못했습니다.",
+      );
+    }
   };
 
   const closeExport = () => {
@@ -553,12 +700,12 @@ export default function App() {
       {store.draftAvailable && !project && (
         <div className="draft-banner" role="status">
           <div>
-            <strong>이전에 작업하던 프로젝트가 있습니다.</strong>
-            <p>브라우저에 자동 저장된 초안을 이어서 작업할 수 있습니다.</p>
+            <strong>{t("draft.bannerTitle")}</strong>
+            <p>{t("draft.bannerBody")}</p>
           </div>
           <div className="draft-banner-actions">
             <button type="button" className="primary-button small" onClick={() => void handleLoadDraft()}>
-              이어서 작업
+              {t("draft.continue")}
             </button>
             <button
               type="button"
@@ -566,18 +713,23 @@ export default function App() {
               onClick={() => {
                 void deleteDraft();
                 store.setDraftAvailable(false);
-                store.pushToast("info", "저장된 초안을 삭제했습니다.");
+                store.pushToast("info", t("draft.deleted"));
               }}
             >
-              새로 시작
+              {t("draft.startNew")}
             </button>
           </div>
         </div>
       )}
 
       <main className={`studio-layout ${tab === "monitor" ? "show-monitor" : "show-settings"}`}>
+        <h1 className="sr-only">판서랩 — 교육용 화이트보드 영상 만들기</h1>
         <div className="settings-column">
-          <SettingsPanel onGenerate={() => void handleGenerate()} onDemo={handleDemo} />
+          <SettingsPanel
+            onGenerate={() => void handleGenerate()}
+            onDemo={handleDemo}
+            onCancelGenerate={handleCancelGenerate}
+          />
         </div>
         <div className="monitor-column">
           <MonitorPanel
@@ -588,11 +740,13 @@ export default function App() {
             onExportJson={() => void handleExportJson()}
             onSnapshot={handleSnapshot}
             onExportSrt={handleExportSrt}
+            onExportSvg={handleExportSvg}
             onOpenPresentation={() => store.openModal("presentation", true)}
             onOpenWorksheet={() => store.openModal("worksheet", true)}
             onOpenQuiz={() => store.openModal("quiz", true)}
             onOpenMaterials={() => store.openModal("materials", true)}
             onExportVideo={() => void handleExportVideo()}
+            onShareLink={() => void handleShareLink()}
             onRegenerate={handleRegenerateScene}
             onRecorded={handleRecorded}
             onLanguageChange={(code) => void handleLanguageChange(code)}
@@ -604,10 +758,10 @@ export default function App() {
         <div className="footer-left">
           <span className="footer-brand">
             <Sparkles size={14} />
-            판서랩
+            {t("app.brand")}
           </span>
           <span className="footer-dot">·</span>
-          <span>교육용 화이트보드 영상 만들기</span>
+          <span>{t("app.tagline")}</span>
           {project && (
             <>
               <span className="footer-dot">·</span>
@@ -620,12 +774,12 @@ export default function App() {
         <div className="footer-right">
           <span className="footer-note">
             <ShieldCheck size={13} />
-            모든 처리는 브라우저에서 이루어집니다
+            {t("app.privacy")}
           </span>
           <span className="footer-dot">·</span>
-          <span>© {new Date().getFullYear()} 판서랩</span>
+          <span>© {new Date().getFullYear()} {t("app.brand")}</span>
           <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="footer-link">
-            Gemini API
+            {t("app.geminiApi")}
             <ArrowUpRight size={12} />
           </a>
         </div>
@@ -635,45 +789,60 @@ export default function App() {
         ref={importRef}
         type="file"
         accept=".json,.panseolab.json,application/json"
+        data-testid="project-import"
         hidden
         onChange={(event) => void handleImportFile(event)}
       />
 
-      <PresentationMode
-        project={project}
-        open={store.presentationOpen}
-        startScene={store.activeSceneIndex}
-        onClose={() => store.openModal("presentation", false)}
-      />
-      <WorksheetModal
-        open={store.worksheetOpen}
-        project={project}
-        onClose={() => store.openModal("worksheet", false)}
-      />
-      <QuizModal
-        open={store.quizOpen}
-        project={project}
-        onClose={() => store.openModal("quiz", false)}
-      />
-      <MaterialsModal
-        open={store.materialsOpen}
-        project={project}
-        onClose={() => store.openModal("materials", false)}
-      />
-      <HistoryModal
-        open={store.historyOpen}
-        onClose={() => store.openModal("history", false)}
-      />
-      <HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />
-      <VideoExportModal
-        open={exportOpen}
-        progress={exportProgress}
-        message={exportMessage}
-        result={exportResult}
-        error={exportError}
-        onCancel={handleCancelExport}
-        onClose={closeExport}
-      />
+      <Suspense fallback={null}>
+        {store.presentationOpen && (
+          <PresentationMode
+            project={project}
+            open
+            startScene={store.activeSceneIndex}
+            onClose={() => store.openModal("presentation", false)}
+          />
+        )}
+        {store.worksheetOpen && (
+          <WorksheetModal
+            open
+            project={project}
+            onClose={() => store.openModal("worksheet", false)}
+          />
+        )}
+        {store.quizOpen && (
+          <QuizModal
+            open
+            project={project}
+            onClose={() => store.openModal("quiz", false)}
+          />
+        )}
+        {store.materialsOpen && (
+          <MaterialsModal
+            open
+            project={project}
+            onClose={() => store.openModal("materials", false)}
+          />
+        )}
+        {store.historyOpen && (
+          <HistoryModal open onClose={() => store.openModal("history", false)} />
+        )}
+        {helpOpen && <HelpModal open onClose={() => setHelpOpen(false)} />}
+        {exportOpen && (
+          <VideoExportModal
+            open
+            progress={exportProgress}
+            message={exportMessage}
+            result={exportResult}
+            error={exportError}
+            converting={converting}
+            canConvert={ffmpegConversionSupported()}
+            onConvert={() => void handleConvertToMp4()}
+            onCancel={handleCancelExport}
+            onClose={closeExport}
+          />
+        )}
+      </Suspense>
       <Toasts />
       {translating && (
         <div className="translating-chip" role="status">

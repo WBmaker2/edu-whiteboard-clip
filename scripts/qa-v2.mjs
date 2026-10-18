@@ -142,8 +142,8 @@ await page.getByPlaceholder("AIzaSy... (Gemini API Key)").fill("AIzaSyTESTKEY123
 await page.waitForTimeout(200);
 const firstCard = page.locator(".scene-card").first();
 await firstCard.getByRole("button", { name: "AI로 다시 쓰기" }).click();
-await page.waitForTimeout(300);
-check("rewrite modal", (await page.getByRole("dialog", { name: "AI로 장면 다시 쓰기" }).count()) > 0);
+await page.getByRole("dialog", { name: "AI로 장면 다시 쓰기" }).waitFor({ timeout: 15000 });
+check("rewrite modal", true);
 await page.getByRole("button", { name: "재작성안 만들기" }).click();
 await page.waitForSelector(".diff-row", { timeout: 20000 });
 check("rewrite diff", (await page.locator(".diff-row.is-changed").count()) > 0);
@@ -151,10 +151,7 @@ await page.screenshot({ path: path.join(OUT, "01-rewrite.png") });
 const rewriteDialog = page.getByRole("dialog", { name: "AI로 장면 다시 쓰기" });
 await rewriteDialog.getByRole("checkbox", { name: /음성도 함께/ }).check();
 await page.getByRole("button", { name: "적용하고 음성 생성" }).click();
-await page.waitForSelector('div[role="dialog"][aria-label="AI로 장면 다시 쓰기"]', {
-  state: "detached",
-  timeout: 30000,
-});
+await rewriteDialog.waitFor({ state: "detached", timeout: 30000 });
 await page.waitForTimeout(400);
 const updatedTitle = await firstCard.locator(".scene-title strong").textContent();
 check("rewrite applied", updatedTitle === rewritten.title, updatedTitle ?? "");
@@ -188,7 +185,7 @@ check("history has snapshot", (await page.locator(".history-item").count()) > 0)
 await page.keyboard.press("Escape");
 
 // 5. WebM export with duration metadata
-await page.locator('input[type="file"]').setInputFiles(path.resolve("tests/fixtures/short-project.json"));
+await page.locator('[data-testid="project-import"]').setInputFiles(path.resolve("tests/fixtures/short-project.json"));
 await page.waitForTimeout(600);
 const webmDownload = page.waitForEvent("download", { timeout: 30000 });
 await page.getByRole("button", { name: "비디오 내보내기" }).click();

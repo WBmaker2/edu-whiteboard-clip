@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Project } from "../types/project";
+import type { AspectRatio, Project } from "../types/project";
 import { AudioEngine } from "../lib/audioEngine";
-import { activeBeatIndex, locateTime, projectDuration } from "../lib/time";
+import { activeBeatIndex, locateTime, projectDuration, sceneStart } from "../lib/time";
 import { renderScene } from "../lib/renderer";
+import type { DecodedVisual } from "../lib/renderer/core";
 
 export interface PlaybackOptions {
   themeId: Project["themeId"];
@@ -14,6 +15,10 @@ export interface PlaybackOptions {
   bgmId: string;
   bgmVolume: number;
   sfx: boolean;
+  penTip: boolean;
+  aspect?: AspectRatio;
+  assetImages?: ReadonlyMap<string, DecodedVisual>;
+  onRenderError?: (error: unknown) => void;
 }
 
 export function usePlayback(
@@ -32,6 +37,7 @@ export function usePlayback(
   const rateRef = useRef(1);
   const playingRef = useRef(false);
   const lastBeatRef = useRef(-1);
+  const renderErrorRef = useRef(false);
   const optionsRef = useRef(options);
   optionsRef.current = options;
   const projectRef = useRef(project);
@@ -42,30 +48,44 @@ export function usePlayback(
 
   const draw = useCallback(
     (value: number) => {
-      const current = projectRef.current;
-      const canvas = canvasRef.current;
-      if (!current || !canvas) return;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-      const { index, localTime } = locateTime(current.scenes, value);
-      const scene = current.scenes[index];
-      const opts = optionsRef.current;
-      const preview = !playingRef.current && localTime < 0.05;
-      const translated =
-        opts.captionLang !== "ko" ? opts.translations[opts.captionLang]?.[index] : undefined;
-      const beatIndex = preview ? 0 : activeBeatIndex(scene, localTime);
-      renderScene(ctx, scene, preview ? Math.min(2, scene.duration) : localTime, {
-        themeId: opts.themeId,
-        visualStyle: opts.visualStyle,
-        layoutStyle: opts.layoutStyle,
-        captions: opts.captions,
-        captionText: opts.captions
-          ? translated?.[beatIndex] ?? scene.beats[beatIndex]?.narration
-          : undefined,
-        sceneIndex: index,
-        revealLimit: preview ? "all" : undefined,
-      });
-      setActiveScene(index);
+      try {
+        const current = projectRef.current;
+        const canvas = canvasRef.current;
+        if (!current || !canvas) return;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        const { index, localTime } = locateTime(current.scenes, value);
+        const scene = current.scenes[index];
+        const opts = optionsRef.current;
+        const preview = !playingRef.current && localTime < 0.05;
+        const translated =
+          opts.captionLang !== "ko" ? opts.translations[opts.captionLang]?.[index] : undefined;
+        const beatIndex = preview ? 0 : activeBeatIndex(scene, localTime);
+        renderScene(ctx, scene, preview ? Math.min(2, scene.duration) : localTime, {
+          themeId: opts.themeId,
+          visualStyle: opts.visualStyle,
+          layoutStyle: opts.layoutStyle,
+          captions: opts.captions,
+          captionText: opts.captions
+            ? translated?.[beatIndex] ?? scene.beats[beatIndex]?.narration
+            : undefined,
+          sceneIndex: index,
+          revealLimit: preview ? "all" : undefined,
+          penTip: opts.penTip && !preview,
+          aspect: opts.aspect,
+          assetImages: opts.assetImages,
+        });
+        setActiveScene(index);
+      } catch (error) {
+        if (!renderErrorRef.current) {
+          renderErrorRef.current = true;
+          optionsRef.current.onRenderError?.(error);
+        }
+        engineRef.current?.pause();
+        playingRef.current = false;
+        setIsPlaying(false);
+        cancelAnimationFrame(rafRef.current);
+      }
     },
     [canvasRef],
   );
@@ -228,9 +248,7 @@ export function usePlayback(
     (index: number) => {
       const current = projectRef.current;
       if (!current || index < 0 || index >= current.scenes.length) return;
-      let start = 0;
-      for (let i = 0; i < index; i += 1) start += current.scenes[i].duration;
-      seek(start + 0.001);
+      seek(sceneStart(current.scenes, index) + 0.001);
     },
     [seek],
   );

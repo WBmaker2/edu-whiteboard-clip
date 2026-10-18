@@ -36,7 +36,7 @@ page.on("pageerror", (error) => errors.push(error.message));
 
 await page.goto(BASE);
 await page.waitForLoadState("networkidle");
-await page.locator('input[type="file"]').setInputFiles(path.resolve("tests/fixtures/short-project.json"));
+await page.locator('[data-testid="project-import"]').setInputFiles(path.resolve("tests/fixtures/short-project.json"));
 await page.waitForTimeout(600);
 
 const support = await page.evaluate(async () => {

@@ -1,19 +1,23 @@
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useShallow } from "zustand/react/shallow";
 import {
   BookOpen,
   ChevronDown,
   Cpu,
+  Download,
   Eye,
   EyeOff,
   KeyRound,
   Layers,
   Loader2,
+  Languages,
   Lock,
   Mic2,
   Palette,
   PlayCircle,
   ShieldCheck,
   Sparkles,
+  Trash2,
   Wand2,
 } from "lucide-react";
 import { useStudioStore } from "../store/studioStore";
@@ -26,29 +30,153 @@ import {
   VISUAL_STYLES,
   VOICES,
 } from "../data/presets";
-import { checkApiKey } from "../lib/gemini";
 import {
   describeBudget,
   generationBudget,
   getSessionCalls,
   subscribeSessionCalls,
 } from "../lib/requestBudget";
+import {
+  deleteUserTemplate,
+  exportTemplateJson,
+  importUserTemplate,
+  listUserTemplates,
+  saveUserTemplate,
+  type UserTemplate,
+} from "../lib/templates";
+import { downloadText, sanitizeFileName } from "../lib/download";
+import { GRADE_LEVELS, SUBJECTS } from "../data/curriculum";
+import { useI18n } from "../lib/i18n";
 
 interface SettingsPanelProps {
   onGenerate: () => void;
   onDemo: () => void;
+  onCancelGenerate?: () => void;
 }
 
 type CheckState = { status: "idle" | "checking" | "ok" | "error"; message: string };
 
-export function SettingsPanel({ onGenerate, onDemo }: SettingsPanelProps) {
-  const store = useStudioStore();
+export function SettingsPanel({ onGenerate, onDemo, onCancelGenerate }: SettingsPanelProps) {
+  const { t, language } = useI18n();
+  const store = useStudioStore(
+    useShallow((state) => ({
+      apiKey: state.apiKey,
+      rememberKey: state.rememberKey,
+      topic: state.topic,
+      themeId: state.themeId,
+      visualStyle: state.visualStyle,
+      layoutStyle: state.layoutStyle,
+      aspect: state.aspect,
+      gradeLevel: state.gradeLevel,
+      subject: state.subject,
+      standards: state.standards,
+      model: state.model,
+      ttsModel: state.ttsModel,
+      voice: state.voice,
+      bgmId: state.bgmId,
+      generateWithAudio: state.generateWithAudio,
+      phase: state.phase,
+      progressPercent: state.progressPercent,
+      progressMessage: state.progressMessage,
+      patch: state.patch,
+      setLanguage: state.setLanguage,
+      setApiKey: state.setApiKey,
+      setRememberKey: state.setRememberKey,
+      setTheme: state.setTheme,
+      setVisualStyle: state.setVisualStyle,
+      setLayoutStyle: state.setLayoutStyle,
+      setAspect: state.setAspect,
+      pushToast: state.pushToast,
+    })),
+  );
   const [showKey, setShowKey] = useState(false);
   const [showTts, setShowTts] = useState(false);
+  const [templates, setTemplates] = useState<UserTemplate[]>([]);
+  const [templateName, setTemplateName] = useState("");
+  const templateImportRef = useRef<HTMLInputElement | null>(null);
   const [checkState, setCheckState] = useState<CheckState>({
     status: "idle",
     message: "",
   });
+
+  useEffect(() => {
+    void listUserTemplates()
+      .then(setTemplates)
+      .catch(() => undefined);
+  }, []);
+
+  const applyTemplate = (template: UserTemplate) => {
+    store.setTheme(template.themeId);
+    store.setVisualStyle(template.visualStyle);
+    store.setLayoutStyle(template.layoutStyle);
+    store.setAspect(template.aspect);
+    store.patch({
+      topic: template.topic,
+      ...(template.voice ? { voice: template.voice } : {}),
+      ...(template.bgmId ? { bgmId: template.bgmId } : {}),
+    });
+    store.pushToast("success", t("settings.templateApplied", { name: template.name }));
+  };
+
+  const saveTemplate = async () => {
+    if (!templateName.trim()) return;
+    try {
+      const next = await saveUserTemplate({
+        name: templateName.trim(),
+        topic: store.topic,
+        themeId: store.themeId,
+        visualStyle: store.visualStyle,
+        layoutStyle: store.layoutStyle,
+        aspect: store.aspect,
+        voice: store.voice,
+        bgmId: store.bgmId,
+      });
+      setTemplates(next);
+      setTemplateName("");
+      store.pushToast("success", t("settings.templateSaved"));
+    } catch (error) {
+      store.pushToast(
+        "error",
+        error instanceof Error
+          ? t("settings.templateSaveFailedReason", { message: error.message })
+          : t("settings.templateSaveFailed"),
+      );
+    }
+  };
+
+  const removeTemplate = async (id: string) => {
+    try {
+      setTemplates(await deleteUserTemplate(id));
+      store.pushToast("info", t("settings.templateDeleted"));
+    } catch {
+      store.pushToast("error", t("settings.templateDeleteFailed"));
+    }
+  };
+
+  const exportTemplate = (template: UserTemplate) => {
+    downloadText(
+      `${sanitizeFileName(template.name, "template")}.panseolab-template.json`,
+      exportTemplateJson(template),
+      "application/json;charset=utf-8",
+    );
+    store.pushToast("success", t("settings.templateDownloaded"));
+  };
+
+  const handleTemplateImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    try {
+      const next = await importUserTemplate(await file.text());
+      setTemplates(next);
+      store.pushToast("success", t("settings.templateImported", { name: file.name }));
+    } catch (error) {
+      store.pushToast(
+        "error",
+        error instanceof Error ? error.message : t("settings.templateImportFailed"),
+      );
+    }
+  };
   const sessionCalls = useSyncExternalStore(subscribeSessionCalls, getSessionCalls);
   const budget = generationBudget(5, store.generateWithAudio);
 
@@ -61,7 +189,8 @@ export function SettingsPanel({ onGenerate, onDemo }: SettingsPanelProps) {
   );
 
   const handleCheckKey = async () => {
-    setCheckState({ status: "checking", message: "키를 확인하는 중..." });
+    setCheckState({ status: "checking", message: t("settings.checkingKey") });
+    const { checkApiKey } = await import("../lib/gemini");
     const result = await checkApiKey(store.apiKey);
     setCheckState({ status: result.ok ? "ok" : "error", message: result.message });
     store.pushToast(result.ok ? "success" : "error", result.message);
@@ -69,13 +198,32 @@ export function SettingsPanel({ onGenerate, onDemo }: SettingsPanelProps) {
 
   return (
     <div className="settings-panel">
+      <input
+        ref={templateImportRef}
+        type="file"
+        accept=".json,application/json"
+        data-testid="template-import"
+        hidden
+        onChange={(event) => void handleTemplateImport(event)}
+      />
       <section className="panel-card">
         <div className="panel-heading">
           <span className="panel-label">
             <KeyRound size={15} />
-            GEMINI API KEY
+            {t("settings.apiKeyTitle")}
           </span>
           <div className="panel-heading-actions">
+            <label className="select-pill" title={t("app.language")}>
+              <Languages size={13} />
+              <select
+                value={language}
+                onChange={(event) => store.setLanguage(event.target.value as "ko" | "en")}
+                aria-label={t("app.language")}
+              >
+                <option value="ko">{t("app.language.ko")}</option>
+                <option value="en">{t("app.language.en")}</option>
+              </select>
+            </label>
             <button
               type="button"
               className="mini-button"
@@ -87,7 +235,7 @@ export function SettingsPanel({ onGenerate, onDemo }: SettingsPanelProps) {
               ) : (
                 <ShieldCheck size={13} />
               )}
-              키 확인
+              {t("settings.checkKey")}
             </button>
             <a
               className="text-link"
@@ -95,7 +243,7 @@ export function SettingsPanel({ onGenerate, onDemo }: SettingsPanelProps) {
               target="_blank"
               rel="noreferrer"
             >
-              무료 키 받기
+              {t("settings.getKey")}
             </a>
           </div>
         </div>
@@ -103,18 +251,18 @@ export function SettingsPanel({ onGenerate, onDemo }: SettingsPanelProps) {
           <input
             type={showKey ? "text" : "password"}
             className="text-input key-input"
-            placeholder="AIzaSy... (Gemini API Key)"
+            placeholder={t("settings.keyPlaceholder")}
             value={store.apiKey}
             onChange={(event) => store.setApiKey(event.target.value)}
             autoComplete="off"
             spellCheck={false}
-            aria-label="Gemini API 키"
+            aria-label={t("settings.apiKeyTitle")}
           />
           <button
             type="button"
             className="input-icon-button"
             onClick={() => setShowKey((value) => !value)}
-            aria-label={showKey ? "API 키 숨기기" : "API 키 표시"}
+            aria-label={showKey ? t("settings.hideKey") : t("settings.showKey")}
           >
             {showKey ? <EyeOff size={17} /> : <Eye size={17} />}
           </button>
@@ -126,11 +274,11 @@ export function SettingsPanel({ onGenerate, onDemo }: SettingsPanelProps) {
               checked={store.rememberKey}
               onChange={(event) => store.setRememberKey(event.target.checked)}
             />
-            <span>이 브라우저에만 키 저장</span>
+            <span>{t("settings.rememberKey")}</span>
           </label>
           <span className="security-note">
             <Lock size={13} />
-            서버로 전송되지 않습니다
+            {t("settings.noServer")}
           </span>
         </div>
         {checkState.message && (
@@ -144,20 +292,20 @@ export function SettingsPanel({ onGenerate, onDemo }: SettingsPanelProps) {
         <div className="panel-heading">
           <span className="panel-label">
             <BookOpen size={15} />
-            수업 주제 및 학습 목표
+            {t("settings.topicTitle")}
           </span>
-          <span className="panel-hint">5단계 교수설계</span>
+          <span className="panel-hint">{t("settings.topicHint")}</span>
         </div>
         <textarea
           rows={3}
           className="text-area"
-          placeholder="수업이나 교육 영상으로 설명할 개념, 과학 원리, 학습 주제를 입력하세요."
+          placeholder={t("settings.topicPlaceholder")}
           value={store.topic}
           onChange={(event) => store.patch({ topic: event.target.value })}
           disabled={isBusy}
         />
         <div className="template-block">
-          <span className="small-label">추천 교육 주제 템플릿</span>
+          <span className="small-label">{t("settings.templates")}</span>
           <div className="template-grid">
             {TOPIC_TEMPLATES.map((template) => (
               <button
@@ -176,15 +324,131 @@ export function SettingsPanel({ onGenerate, onDemo }: SettingsPanelProps) {
             ))}
           </div>
         </div>
+        <div className="user-template-block">
+          <span className="small-label">{t("settings.myTemplates")}</span>
+          <div className="user-template-save">
+            <input
+              className="text-input compact-input"
+              placeholder={t("settings.templateNamePlaceholder")}
+              value={templateName}
+              onChange={(event) => setTemplateName(event.target.value)}
+              maxLength={40}
+            />
+            <button
+              type="button"
+              className={`mini-button ${templateName.trim() ? "btn-pulse" : ""}`}
+              onClick={() => void saveTemplate()}
+              disabled={!templateName.trim()}
+            >
+              {t("settings.saveTemplate")}
+            </button>
+            <button type="button" className="mini-button" onClick={() => templateImportRef.current?.click()}>
+              {t("settings.importTemplate")}
+            </button>
+          </div>
+          {templates.length > 0 ? (
+            <div className="user-template-list">
+              {templates.map((template) => (
+                <div className="user-template-chip" key={template.id}>
+                  <button
+                    type="button"
+                    className="user-template-apply"
+                    onClick={() => applyTemplate(template)}
+                    title={template.topic}
+                  >
+                    <strong>{template.name}</strong>
+                    <small>
+                      {template.aspect === "9:16"
+                        ? t("settings.aspectPortraitShort")
+                        : t("settings.aspectLandscapeShort")}{" "}
+                      ·{" "}
+                      {THEMES[template.themeId]?.name ?? template.themeId}
+                    </small>
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-button tiny"
+                    onClick={() => exportTemplate(template)}
+                    aria-label={t("settings.exportTemplateAria", { name: template.name })}
+                    title={t("settings.exportTemplateTitle")}
+                  >
+                    <Download size={12} />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-button tiny is-danger"
+                    onClick={() => void removeTemplate(template.id)}
+                    aria-label={t("settings.deleteTemplateAria", { name: template.name })}
+                    title={t("storyboard.deleteShort")}
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="helper-note">
+              {t("settings.templateEmptyHint")}
+            </p>
+          )}
+        </div>
+      </section>
+
+      <section className="panel-card">
+        <div className="panel-heading">
+          <span className="panel-label">
+            <BookOpen size={15} />
+            {t("settings.curriculumTitle")}
+          </span>
+          <span className="panel-hint">{t("settings.curriculumHint")}</span>
+        </div>
+        <div className="editor-row">
+          <label className="field-label">
+            {t("settings.gradeLevel")}
+            <select
+              className="text-input"
+              value={store.gradeLevel}
+              onChange={(event) => store.patch({ gradeLevel: event.target.value })}
+            >
+              {GRADE_LEVELS.map((level) => (
+                <option key={level.id} value={level.id}>
+                  {level.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field-label">
+            {t("settings.subject")}
+            <select
+              className="text-input"
+              value={store.subject}
+              onChange={(event) => store.patch({ subject: event.target.value })}
+            >
+              {SUBJECTS.map((subject) => (
+                <option key={subject} value={subject}>
+                  {subject || t("settings.noSubject")}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <textarea
+          rows={2}
+          className="text-area compact-area"
+          placeholder={t("settings.standardsPlaceholder")}
+          value={store.standards}
+          onChange={(event) => store.patch({ standards: event.target.value })}
+          disabled={isBusy}
+        />
       </section>
 
       <section className="panel-card">
         <div className="panel-heading">
           <span className="panel-label">
             <Layers size={15} />
-            그래픽 표현 모드
+            {t("settings.visualTitle")}
           </span>
-          <span className="panel-hint">선택 즉시 캔버스 반영</span>
+          <span className="panel-hint">{t("settings.visualHint")}</span>
         </div>
         <div className="option-grid three">
           {VISUAL_STYLES.map((option) => (
@@ -192,7 +456,7 @@ export function SettingsPanel({ onGenerate, onDemo }: SettingsPanelProps) {
               key={option.id}
               type="button"
               className={`option-card ${store.visualStyle === option.id ? "is-selected" : ""}`}
-              onClick={() => store.patch({ visualStyle: option.id })}
+              onClick={() => store.setVisualStyle(option.id)}
             >
               <span className="option-top">
                 <span className="option-title">{option.name}</span>
@@ -208,9 +472,9 @@ export function SettingsPanel({ onGenerate, onDemo }: SettingsPanelProps) {
         <div className="panel-heading">
           <span className="panel-label">
             <LayoutGridIcon />
-            영상 연출 스타일
+            {t("settings.layoutTitle")}
           </span>
-          <span className="panel-hint">5가지 연출 모드</span>
+          <span className="panel-hint">{t("settings.layoutHint")}</span>
         </div>
         <div className="option-grid two">
           {LAYOUT_STYLES.map((option) => (
@@ -218,7 +482,7 @@ export function SettingsPanel({ onGenerate, onDemo }: SettingsPanelProps) {
               key={option.id}
               type="button"
               className={`option-card ${store.layoutStyle === option.id ? "is-selected" : ""}`}
-              onClick={() => store.patch({ layoutStyle: option.id })}
+              onClick={() => store.setLayoutStyle(option.id)}
             >
               <span className="option-top">
                 <span className="option-title-with-badge">
@@ -237,7 +501,7 @@ export function SettingsPanel({ onGenerate, onDemo }: SettingsPanelProps) {
         <div className="panel-heading">
           <span className="panel-label">
             <Palette size={15} />
-            디자인 색상 템플릿
+            {t("settings.themeTitle")}
           </span>
           <span className="panel-hint">Color Theme</span>
         </div>
@@ -247,7 +511,7 @@ export function SettingsPanel({ onGenerate, onDemo }: SettingsPanelProps) {
               key={theme.id}
               type="button"
               className={`theme-card ${store.themeId === theme.id ? "is-selected" : ""}`}
-              onClick={() => store.patch({ themeId: theme.id })}
+              onClick={() => store.setTheme(theme.id)}
             >
               <span
                 className="theme-swatch"
@@ -272,8 +536,50 @@ export function SettingsPanel({ onGenerate, onDemo }: SettingsPanelProps) {
       <section className="panel-card">
         <div className="panel-heading">
           <span className="panel-label">
+            <LayoutGridIcon />
+            {t("settings.aspectTitle")}
+          </span>
+          <span className="panel-hint">{t("settings.aspectHint")}</span>
+        </div>
+        <div className="option-grid two">
+          <button
+            type="button"
+            className={`option-card ${store.aspect === "16:9" ? "is-selected" : ""}`}
+            onClick={() => store.setAspect("16:9")}
+          >
+            <span className="option-top">
+              <span className="option-title">{t("settings.aspectLandscape")}</span>
+              <span className="option-desc">{t("settings.aspectLandscapeDesc")}</span>
+            </span>
+            <span className="radio-dot" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className={`option-card ${store.aspect === "9:16" ? "is-selected" : ""}`}
+            onClick={() => store.setAspect("9:16")}
+          >
+            <span className="option-top">
+              <span className="option-title-with-badge">
+                <span className="option-title">{t("settings.aspectVertical")}</span>
+                <span className="tiny-badge">9:16</span>
+              </span>
+              <span className="option-desc">{t("settings.aspectVerticalDesc")}</span>
+            </span>
+            <span className="radio-dot" aria-hidden="true" />
+          </button>
+        </div>
+        {store.aspect === "9:16" && (
+          <p className="model-note">
+            {t("settings.aspectVerticalNote")}
+          </p>
+        )}
+      </section>
+
+      <section className="panel-card">
+        <div className="panel-heading">
+          <span className="panel-label">
             <Cpu size={15} />
-            Gemini 모델
+            {t("settings.modelTitle")}
           </span>
           <button
             type="button"
@@ -281,7 +587,7 @@ export function SettingsPanel({ onGenerate, onDemo }: SettingsPanelProps) {
             onClick={() => setShowTts((value) => !value)}
             aria-expanded={showTts}
           >
-            TTS 음성 모델
+            {t("settings.ttsModel")}
             <ChevronDown size={13} className={showTts ? "rotate" : ""} />
           </button>
         </div>
@@ -326,7 +632,7 @@ export function SettingsPanel({ onGenerate, onDemo }: SettingsPanelProps) {
           </div>
         )}
         <p className="model-note">
-          선택한 모델을 사용할 수 없으면 자동으로 대체 모델을 시도합니다.
+          {t("settings.modelNote")}
           <span className="mono">{selectedModel.id}</span>
         </p>
       </section>
@@ -335,9 +641,9 @@ export function SettingsPanel({ onGenerate, onDemo }: SettingsPanelProps) {
         <div className="panel-heading">
           <span className="panel-label">
             <Mic2 size={15} />
-            한국어 나레이션 음성
+            {t("settings.voiceTitle")}
           </span>
-          <span className="panel-hint">TTS 보이스</span>
+          <span className="panel-hint">{t("settings.voiceHint")}</span>
         </div>
         <div className="segmented">
           {VOICES.map((voice) => (
@@ -366,31 +672,36 @@ export function SettingsPanel({ onGenerate, onDemo }: SettingsPanelProps) {
           {store.phase === "generating" ? (
             <>
               <Loader2 size={17} className="spin" />
-              스토리보드와 나레이션을 만드는 중...
+              {t("settings.generating")}
             </>
           ) : (
             <>
               <Wand2 size={17} />
-              화이트보드 교육 영상 생성하기
+              {t("settings.generate")}
             </>
           )}
         </button>
         <button type="button" className="demo-link" onClick={onDemo} disabled={isBusy}>
           <PlayCircle size={15} />
-          API 키 없이 예시 프로젝트로 먼저 둘러보기
+          {t("settings.demoLink")}
         </button>
         {store.phase === "generating" && (
           <div className="progress-block" aria-live="polite">
             <div className="progress-head">
               <span>
                 <Sparkles size={13} />
-                {store.progressMessage || "생성 준비 중..."}
+                {store.progressMessage || t("settings.generatingPrep")}
               </span>
               <strong>{store.progressPercent}%</strong>
             </div>
             <div className="progress-track">
               <span style={{ width: `${store.progressPercent}%` }} />
             </div>
+            {onCancelGenerate && (
+              <button type="button" className="mini-button progress-cancel" onClick={onCancelGenerate}>
+                {t("settings.cancelGenerate")}
+              </button>
+            )}
           </div>
         )}
         <label className="checkbox-row generate-audio-toggle">
@@ -399,19 +710,18 @@ export function SettingsPanel({ onGenerate, onDemo }: SettingsPanelProps) {
             checked={store.generateWithAudio}
             onChange={(event) => store.patch({ generateWithAudio: event.target.checked })}
           />
-          나레이션 음성도 함께 생성 (무료 한도 절약은 해제)
+          {t("settings.generateWithAudio")}
         </label>
         <p className="helper-note budget-note">
-          예상 Gemini 호출: {describeBudget(budget)} · 이번 세션 {sessionCalls}회 사용
+          {t("settings.budgetNote", { budget: describeBudget(budget, t), calls: sessionCalls })}
         </p>
         {!store.apiKey.trim() && (
           <p className="helper-note">
-            AI 생성에는 Gemini API 키가 필요합니다. 예시 프로젝트는 키 없이도 모든 기능을
-            체험할 수 있습니다.
+            {t("settings.needKey")}
           </p>
         )}
         {store.apiKey.trim() && !store.topic.trim() && (
-          <p className="helper-note is-error">수업 주제를 먼저 입력해 주세요.</p>
+          <p className="helper-note is-error">{t("settings.needTopic")}</p>
         )}
       </div>
     </div>

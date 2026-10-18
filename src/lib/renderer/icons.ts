@@ -66,6 +66,12 @@ function readNumber(value: string | undefined, fallback = 0): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+export type LucideIconNode = IconNode;
+
+export function rawIconNode(name: string): IconNode {
+  return iconRegistry[name] ?? iconRegistry[ICON_FALLBACK];
+}
+
 function traceChild(
   ctx: CanvasRenderingContext2D,
   child: IconChild,

@@ -3,6 +3,7 @@ import { ClipboardList, GraduationCap, Printer, Sparkles, UserRound } from "luci
 import type { Project } from "../types/project";
 import { Modal } from "./Modal";
 import { buildWorksheet } from "../lib/worksheet";
+import { useI18n } from "../lib/i18n";
 
 interface WorksheetModalProps {
   open: boolean;
@@ -12,43 +13,48 @@ interface WorksheetModalProps {
 
 type WorksheetTab = "summary" | "fillIn" | "mcq" | "essay";
 
-const TABS: { id: WorksheetTab; label: string }[] = [
-  { id: "summary", label: "1. A4 핵심 요약 정리" },
-  { id: "fillIn", label: "2. 개념 빈칸 퀴즈" },
-  { id: "mcq", label: "3. 실전 4지선다" },
-  { id: "essay", label: "4. 서술형 & 논술 루브릭" },
+const TABS: { id: WorksheetTab; labelKey: string }[] = [
+  { id: "summary", labelKey: "worksheet.tabSummary" },
+  { id: "fillIn", labelKey: "worksheet.tabFillIn" },
+  { id: "mcq", labelKey: "worksheet.tabMcq" },
+  { id: "essay", labelKey: "worksheet.tabEssay" },
 ];
 
 export function WorksheetModal({ open, project, onClose }: WorksheetModalProps) {
+  const { t } = useI18n();
   const [tab, setTab] = useState<WorksheetTab>("summary");
   const [teacher, setTeacher] = useState(false);
   const worksheet = useMemo(() => (project ? buildWorksheet(project) : null), [project]);
   if (!project || !worksheet) return null;
 
   const today = new Date();
-  const dateLabel = `${today.getFullYear()}년 ${today.getMonth() + 1}월 ${today.getDate()}일`;
+  const dateLabel = t("worksheet.date", {
+    year: today.getFullYear(),
+    month: today.getMonth() + 1,
+    day: today.getDate(),
+  });
 
   return (
     <Modal
       open={open}
       onClose={onClose}
       size="wide"
-      title="수업용 A4 요약 학습지"
-      subtitle="요약 정리, 빈칸 퀴즈, 4지선다, 서술형 평가를 한 번에 인쇄합니다."
+      title={t("worksheet.title")}
+      subtitle={t("worksheet.subtitle")}
       icon={<ClipboardList size={19} />}
       actions={
         <>
           <div className="teacher-toggle">
             <button type="button" className={!teacher ? "is-active" : ""} onClick={() => setTeacher(false)}>
-              <UserRound size={13} /> 학생용
+              <UserRound size={13} /> {t("worksheet.student")}
             </button>
             <button type="button" className={teacher ? "is-active" : ""} onClick={() => setTeacher(true)}>
-              <GraduationCap size={13} /> 교사용
+              <GraduationCap size={13} /> {t("worksheet.teacher")}
             </button>
           </div>
           <button type="button" className="primary-button small" onClick={() => window.print()}>
             <Printer size={14} />
-            인쇄 / PDF
+            {t("worksheet.print")}
           </button>
         </>
       }
@@ -62,7 +68,7 @@ export function WorksheetModal({ open, project, onClose }: WorksheetModalProps) 
               className={tab === item.id ? "is-active" : ""}
               onClick={() => setTab(item.id)}
             >
-              {item.label}
+              {t(item.labelKey)}
             </button>
           ))}
         </div>
@@ -74,18 +80,18 @@ export function WorksheetModal({ open, project, onClose }: WorksheetModalProps) 
                 <Sparkles size={16} />
               </span>
               <span>
-                <strong>판서랩</strong>
-                <small>교육용 화이트보드 영상 만들기</small>
+                <strong>{t("worksheet.brand")}</strong>
+                <small>{t("worksheet.brandTagline")}</small>
               </span>
             </div>
             <div className="worksheet-meta">
-              <span>발행일: {dateLabel}</span>
+              <span>{t("worksheet.issuedOn", { date: dateLabel })}</span>
               <table>
                 <tbody>
                   <tr>
-                    <th>학년 / 반</th>
-                    <th>번호</th>
-                    <th>성명</th>
+                    <th>{t("worksheet.gradeClass")}</th>
+                    <th>{t("worksheet.number")}</th>
+                    <th>{t("worksheet.name")}</th>
                   </tr>
                   <tr>
                     <td />
@@ -98,14 +104,14 @@ export function WorksheetModal({ open, project, onClose }: WorksheetModalProps) 
           </header>
 
           <div className="worksheet-title">
-            <p className="eyebrow">5단계 교수학습 설계 · 핵심 개념 정리와 다면 평가</p>
+            <p className="eyebrow">{t("worksheet.eyebrow")}</p>
             <h1>{project.topic}</h1>
             <p>{project.scenes[0]?.subtitle}</p>
           </div>
 
           {tab === "summary" && (
             <section className="worksheet-section">
-              <h2>오늘의 핵심 학습 질문 &amp; 탐구 목표</h2>
+              <h2>{t("worksheet.summaryTitle")}</h2>
               <div className="worksheet-question-box">
                 <strong>{project.scenes[0]?.title}</strong>
                 <p>{project.scenes[0]?.subtitle}</p>
@@ -115,7 +121,11 @@ export function WorksheetModal({ open, project, onClose }: WorksheetModalProps) 
                   <article key={scene.id} className="worksheet-summary-item">
                     <div className="worksheet-summary-head">
                       <span className={`worksheet-step step-${scene.type}`}>
-                        {index === 0 ? "도입" : index === project.scenes.length - 1 ? "정리" : `전개 ${index}단계`}
+                        {index === 0
+                          ? t("worksheet.intro")
+                          : index === project.scenes.length - 1
+                            ? t("worksheet.wrapUp")
+                            : t("worksheet.development", { step: index })}
                       </span>
                       <strong>{scene.title}</strong>
                       <p>{scene.subtitle}</p>
@@ -132,8 +142,8 @@ export function WorksheetModal({ open, project, onClose }: WorksheetModalProps) 
                 ))}
               </div>
               <div className="worksheet-reflection">
-                <h3>2. 수업 배움 성찰 및 필기 노트</h3>
-                <p>오늘 수업을 통해 새롭게 깨달은 원리나 더 탐구해 보고 싶은 점을 기록하세요.</p>
+                <h3>{t("worksheet.reflectionTitle")}</h3>
+                <p>{t("worksheet.reflectionBody")}</p>
                 <div className="reflection-lines" />
               </div>
             </section>
@@ -141,8 +151,8 @@ export function WorksheetModal({ open, project, onClose }: WorksheetModalProps) 
 
           {tab === "fillIn" && (
             <section className="worksheet-section">
-              <h2>개념 빈칸 퀴즈</h2>
-              <p className="worksheet-section-desc">밑줄에 들어갈 핵심 개념을 적어 보세요.</p>
+              <h2>{t("worksheet.fillInTitle")}</h2>
+              <p className="worksheet-section-desc">{t("worksheet.fillInDesc")}</p>
               {worksheet.fillIn.map((item) => (
                 <div className="worksheet-question" key={item.id}>
                   <span className="question-number">{item.id}</span>
@@ -155,8 +165,8 @@ export function WorksheetModal({ open, project, onClose }: WorksheetModalProps) 
 
           {tab === "mcq" && (
             <section className="worksheet-section">
-              <h2>실전 4지선다 형성평가</h2>
-              <p className="worksheet-section-desc">가장 알맞은 답을 하나 골라 표시하세요.</p>
+              <h2>{t("worksheet.mcqTitle")}</h2>
+              <p className="worksheet-section-desc">{t("worksheet.mcqDesc")}</p>
               {worksheet.multipleChoice.map((item) => (
                 <div className="worksheet-question mcq" key={item.id}>
                   <span className="question-number">{item.id}</span>
@@ -173,7 +183,7 @@ export function WorksheetModal({ open, project, onClose }: WorksheetModalProps) 
                         </span>
                       ))}
                     </div>
-                    {teacher && <p className="mcq-explanation">해설: {item.explanation}</p>}
+                    {teacher && <p className="mcq-explanation">{t("worksheet.explanation", { explanation: item.explanation })}</p>}
                   </div>
                 </div>
               ))}
@@ -182,8 +192,8 @@ export function WorksheetModal({ open, project, onClose }: WorksheetModalProps) 
 
           {tab === "essay" && (
             <section className="worksheet-section">
-              <h2>심층 서술형 &amp; 논술 루브릭</h2>
-              <p className="worksheet-section-desc">각 문항의 조건을 확인하고 자신의 언어로 서술하세요.</p>
+              <h2>{t("worksheet.essayTitle")}</h2>
+              <p className="worksheet-section-desc">{t("worksheet.essayDesc")}</p>
               {worksheet.essays.map((item) => (
                 <div className="worksheet-question essay" key={item.id}>
                   <span className="question-number">{item.id}</span>
@@ -197,9 +207,9 @@ export function WorksheetModal({ open, project, onClose }: WorksheetModalProps) 
                     <div className="essay-lines" />
                     {teacher && (
                       <div className="teacher-answer">
-                        <strong>예시 답안</strong>
+                        <strong>{t("worksheet.modelAnswer")}</strong>
                         <p>{item.modelAnswer}</p>
-                        <strong>루브릭</strong>
+                        <strong>{t("worksheet.rubric")}</strong>
                         <p>{item.rubric}</p>
                       </div>
                     )}
@@ -210,7 +220,7 @@ export function WorksheetModal({ open, project, onClose }: WorksheetModalProps) 
           )}
 
           <footer className="worksheet-footer">
-            판서랩 · 교육용 화이트보드 영상 만들기 · 교수학습용 비영리 교육자료로 자유롭게 활용할 수 있습니다.
+            {t("worksheet.footer")}
           </footer>
         </div>
       </div>

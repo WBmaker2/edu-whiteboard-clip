@@ -54,4 +54,40 @@ describe("GeminiQueue", () => {
     expect(delay).toBeGreaterThanOrEqual(150);
     expect(delay).toBeLessThanOrEqual(300);
   });
+
+  it("rejects a task that exceeds its timeout and frees the slot", async () => {
+    const queue = new GeminiQueue({ maxConcurrent: 1, minIntervalMs: 0 });
+    const slow = queue.run(
+      (signal) =>
+        new Promise<string>((resolve, reject) => {
+          const timer = setTimeout(() => resolve("too late"), 5000);
+          signal.addEventListener("abort", () => {
+            clearTimeout(timer);
+            reject(signal.reason);
+          });
+        }),
+      { timeoutMs: 30 },
+    );
+    await expect(slow).rejects.toMatchObject({ name: "TimeoutError" });
+    await expect(
+      queue.run(async () => "ok", { timeoutMs: 1000 }),
+    ).resolves.toBe("ok");
+  });
+
+  it("does not start queued tasks when the external signal is already aborted", async () => {
+    const queue = new GeminiQueue({ maxConcurrent: 1, minIntervalMs: 0 });
+    const controller = new AbortController();
+    controller.abort();
+    let started = false;
+    await expect(
+      queue.run(
+        async () => {
+          started = true;
+          return "never";
+        },
+        { signal: controller.signal },
+      ),
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(started).toBe(false);
+  });
 });

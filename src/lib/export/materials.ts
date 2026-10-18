@@ -1,7 +1,10 @@
 import type { Project } from "../../types/project";
 import { THEMES } from "../../data/presets";
 import { roundedPath, wrapLines } from "../renderer";
+import { text } from "../renderer/core";
+import { fillGridPattern } from "../renderer/background";
 import { drawIcon } from "../renderer/icons";
+import { ensureExportFonts } from "../fonts";
 
 export interface MaterialImage {
   id: string;
@@ -11,30 +14,6 @@ export interface MaterialImage {
   height: number;
   dataUrl: string;
   blob: Blob;
-}
-
-function fillGrid(
-  ctx: CanvasRenderingContext2D,
-  width: number,
-  height: number,
-  palette: (typeof THEMES)[string],
-) {
-  ctx.fillStyle = palette.bg;
-  ctx.fillRect(0, 0, width, height);
-  ctx.strokeStyle = palette.grid;
-  ctx.lineWidth = 1;
-  for (let x = 40; x < width; x += 60) {
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, height);
-    ctx.stroke();
-  }
-  for (let y = 40; y < height; y += 60) {
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(width, y);
-    ctx.stroke();
-  }
 }
 
 function label(
@@ -47,13 +26,7 @@ function label(
   color: string,
   align: CanvasTextAlign = "left",
 ) {
-  ctx.save();
-  ctx.font = `${weight} ${size}px Pretendard, "Apple SD Gothic Neo", sans-serif`;
-  ctx.fillStyle = color;
-  ctx.textAlign = align;
-  ctx.textBaseline = "middle";
-  ctx.fillText(value, x, y);
-  ctx.restore();
+  text(ctx, value, x, y, { size, weight, color, align });
 }
 
 function badge(
@@ -109,13 +82,14 @@ export async function buildMaterials(project: Project): Promise<{
   thumbnail: MaterialImage;
   cards: MaterialImage[];
 }> {
+  await ensureExportFonts();
   const palette = THEMES[project.themeId] ?? THEMES.paper;
   const thumbnailCanvas = document.createElement("canvas");
   thumbnailCanvas.width = 1280;
   thumbnailCanvas.height = 720;
   const thumb = thumbnailCanvas.getContext("2d");
   if (!thumb) throw new Error("썸네일 캔버스를 초기화하지 못했습니다.");
-  fillGrid(thumb, 1280, 720, palette);
+  fillGridPattern(thumb, 1280, 720, palette);
   badge(thumb, "판서랩 5분 특강", 76, 64, palette);
   label(thumb, project.topic, 78, 180, 52, 900, palette.title);
   label(
@@ -179,7 +153,7 @@ export async function buildMaterials(project: Project): Promise<{
     canvas.height = 1080;
     const ctx = canvas.getContext("2d");
     if (!ctx) continue;
-    fillGrid(ctx, 1080, 1080, palette);
+    fillGridPattern(ctx, 1080, 1080, palette);
     badge(ctx, `SCENE 0${index + 1}`, 72, 72, palette);
     label(ctx, `${index + 1} / ${project.scenes.length}`, 1008, 92, 18, 700, palette.subtitle, "right");
     const titleLines = wrapLines(ctx, scene.title, 900, 56, 900, 2);

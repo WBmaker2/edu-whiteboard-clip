@@ -41,15 +41,42 @@ export function quizBudget(): CallBudget {
   return budget({ storyboard: 0, tts: 0, rewrite: 0, translation: 0, quiz: 1 });
 }
 
-export function describeBudget(value: CallBudget): string {
+export type BudgetTranslator = (
+  key: string,
+  params?: Record<string, string | number>,
+) => string;
+
+const KO_BUDGET: Record<string, string> = {
+  "budget.storyboard": "스토리보드 {count}회",
+  "budget.tts": "음성 {count}회",
+  "budget.rewrite": "재작성 {count}회",
+  "budget.translation": "번역 {count}회",
+  "budget.quiz": "퀴즈 {count}회",
+  "budget.none": "Gemini 호출 없음",
+  "budget.total": "{parts} = 총 {total}회",
+};
+
+function fallbackBudgetTranslate(
+  key: string,
+  params?: Record<string, string | number>,
+): string {
+  const template = KO_BUDGET[key] ?? key;
+  if (!params) return template;
+  return template.replace(/\{(\w+)\}/g, (match, name: string) =>
+    params[name] !== undefined ? String(params[name]) : match,
+  );
+}
+
+export function describeBudget(value: CallBudget, t?: BudgetTranslator): string {
+  const tr = t ?? fallbackBudgetTranslate;
   const parts: string[] = [];
-  if (value.storyboard) parts.push(`스토리보드 ${value.storyboard}회`);
-  if (value.tts) parts.push(`음성 ${value.tts}회`);
-  if (value.rewrite) parts.push(`재작성 ${value.rewrite}회`);
-  if (value.translation) parts.push(`번역 ${value.translation}회`);
-  if (value.quiz) parts.push(`퀴즈 ${value.quiz}회`);
-  if (parts.length === 0) return "Gemini 호출 없음";
-  return `${parts.join(" + ")} = 총 ${value.total}회`;
+  if (value.storyboard) parts.push(tr("budget.storyboard", { count: value.storyboard }));
+  if (value.tts) parts.push(tr("budget.tts", { count: value.tts }));
+  if (value.rewrite) parts.push(tr("budget.rewrite", { count: value.rewrite }));
+  if (value.translation) parts.push(tr("budget.translation", { count: value.translation }));
+  if (value.quiz) parts.push(tr("budget.quiz", { count: value.quiz }));
+  if (parts.length === 0) return tr("budget.none");
+  return tr("budget.total", { parts: parts.join(" + "), total: value.total });
 }
 
 let sessionCalls = 0;

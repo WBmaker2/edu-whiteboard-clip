@@ -16,8 +16,11 @@ import {
   X,
 } from "lucide-react";
 import type { Project } from "../types/project";
+import { useShallow } from "zustand/react/shallow";
 import { useStudioStore } from "../store/studioStore";
-import { CANVAS_HEIGHT, CANVAS_WIDTH, renderScene } from "../lib/renderer";
+import { useAssetImages } from "../hooks/useAssetImages";
+import { canvasProfile, renderScene } from "../lib/renderer";
+import { useI18n } from "../lib/i18n";
 
 interface PresentationModeProps {
   project: Project | null;
@@ -34,7 +37,20 @@ interface Stroke {
 }
 
 export function PresentationMode({ project, open, startScene, onClose }: PresentationModeProps) {
-  const store = useStudioStore();
+  const { t } = useI18n();
+  const store = useStudioStore(
+    useShallow((state) => ({
+      themeId: state.themeId,
+      visualStyle: state.visualStyle,
+      layoutStyle: state.layoutStyle,
+      captions: state.captions,
+      captionLang: state.captionLang,
+      translations: state.translations,
+      aspect: state.aspect,
+      pushToast: state.pushToast,
+    })),
+  );
+  const profile = canvasProfile(store.aspect);
   const stageRef = useRef<HTMLCanvasElement | null>(null);
   const overlayRef = useRef<HTMLCanvasElement | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -49,6 +65,7 @@ export function PresentationMode({ project, open, startScene, onClose }: Present
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   const scene = project?.scenes[sceneIndex];
+  const assetImages = useAssetImages(project);
 
   const drawStage = useCallback(() => {
     const canvas = stageRef.current;
@@ -74,6 +91,9 @@ export function PresentationMode({ project, open, startScene, onClose }: Present
       captionText: store.captions ? captionText : undefined,
       sceneIndex,
       revealLimit: reveal >= total ? "all" : reveal,
+      penTip: false,
+      aspect: store.aspect,
+      assetImages,
     });
   }, [
     project,
@@ -85,6 +105,8 @@ export function PresentationMode({ project, open, startScene, onClose }: Present
     store.captions,
     store.captionLang,
     store.translations,
+    store.aspect,
+    assetImages,
   ]);
 
   const redrawOverlay = useCallback(() => {
@@ -92,7 +114,7 @@ export function PresentationMode({ project, open, startScene, onClose }: Present
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    ctx.clearRect(0, 0, profile.width, profile.height);
     const strokes = strokesRef.current[sceneIndex] ?? [];
     for (const stroke of strokes) {
       if (stroke.points.length < 2) continue;
@@ -119,7 +141,7 @@ export function PresentationMode({ project, open, startScene, onClose }: Present
       ctx.stroke();
       ctx.restore();
     }
-  }, [sceneIndex]);
+  }, [sceneIndex, profile.width, profile.height]);
 
   useEffect(() => {
     if (!open) return;
@@ -196,22 +218,24 @@ export function PresentationMode({ project, open, startScene, onClose }: Present
     return scene.beats.map((item, index) => ({
       beat: item,
       prompts: [
-        `“${item.label}”을(를) 일상에서 본 경험이 있나요?`,
-        `만약 ${item.label} 단계가 없다면 어떤 일이 생길까요?`,
+        t("present.guidePromptSeen", { label: item.label }),
+        t("present.guidePromptMissing", { label: item.label }),
         index === scene.beats.length - 1
-          ? "오늘 배운 내용을 한 문장으로 정리해 볼까요?"
-          : `다음 단계인 ${scene.beats[index + 1]?.label ?? "다음 개념"}과 어떻게 연결될까요?`,
+          ? t("present.guidePromptWrap")
+          : t("present.guidePromptConnect", {
+              next: scene.beats[index + 1]?.label ?? t("present.guideNextConcept"),
+            }),
       ],
     }));
-  }, [scene]);
+  }, [scene, t]);
 
   const pointFromEvent = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = overlayRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
     return {
-      x: ((event.clientX - rect.left) / rect.width) * CANVAS_WIDTH,
-      y: ((event.clientY - rect.top) / rect.height) * CANVAS_HEIGHT,
+      x: ((event.clientX - rect.left) / rect.width) * profile.width,
+      y: ((event.clientY - rect.top) / rect.height) * profile.height,
     };
   };
 
@@ -249,7 +273,7 @@ export function PresentationMode({ project, open, startScene, onClose }: Present
 
   const toggleNarration = () => {
     if (!scene?.audioUrl) {
-      store.pushToast("info", "이 씬에는 아직 나레이션 음성이 없습니다.");
+      store.pushToast("info", t("present.noNarration"));
       return;
     }
     if (!audioRef.current) {
@@ -282,7 +306,7 @@ export function PresentationMode({ project, open, startScene, onClose }: Present
         <div className="presentation-title-group">
           <span className="presentation-badge">
             <Presentation size={14} />
-            교사용 수업 발표 모드
+            {t("present.badge")}
           </span>
           <div>
             <strong>{project.topic}</strong>
@@ -294,7 +318,7 @@ export function PresentationMode({ project, open, startScene, onClose }: Present
 
         <div className="presentation-tools">
           <div className="presentation-group">
-            <span className="presentation-label">판서 공개</span>
+            <span className="presentation-label">{t("present.revealLabel")}</span>
             {Array.from({ length: Math.max(1, scene.beats.length - 1) }, (_, index) => index + 1).map(
               (step) => (
                 <button
@@ -303,7 +327,7 @@ export function PresentationMode({ project, open, startScene, onClose }: Present
                   className={reveal === step ? "is-active" : ""}
                   onClick={() => setReveal(step)}
                 >
-                  {step}단계
+                  {t("present.step", { step })}
                 </button>
               ),
             )}
@@ -312,42 +336,51 @@ export function PresentationMode({ project, open, startScene, onClose }: Present
               className={reveal >= scene.beats.length ? "is-active" : ""}
               onClick={() => setReveal(scene.beats.length)}
             >
-              전체
+              {t("present.revealAll")}
             </button>
           </div>
           <div className="presentation-group">
-            <button type="button" className={tool === "laser" ? "is-active" : ""} onClick={() => setTool("laser")} title="레이저 (L)">
-              <MousePointer2 size={14} /> 레이저
+            <button type="button" className={tool === "laser" ? "is-active" : ""} onClick={() => setTool("laser")} title={t("present.laserTitle")}>
+              <MousePointer2 size={14} /> {t("present.laser")}
             </button>
-            <button type="button" className={tool === "pen" ? "is-active" : ""} onClick={() => setTool("pen")} title="판서 펜 (P)">
-              <PenLine size={14} /> 펜
+            <button type="button" className={tool === "pen" ? "is-active" : ""} onClick={() => setTool("pen")} title={t("present.penTitle")}>
+              <PenLine size={14} /> {t("present.pen")}
             </button>
-            <button type="button" className={tool === "highlighter" ? "is-active" : ""} onClick={() => setTool("highlighter")} title="형광펜 (H)">
-              <Highlighter size={14} /> 형광펜
+            <button type="button" className={tool === "highlighter" ? "is-active" : ""} onClick={() => setTool("highlighter")} title={t("present.highlighterTitle")}>
+              <Highlighter size={14} /> {t("present.highlighter")}
             </button>
-            <button type="button" className={tool === "eraser" ? "is-active" : ""} onClick={() => setTool("eraser")} title="지우기 (C)">
-              <Eraser size={14} /> 지우기
+            <button type="button" className={tool === "eraser" ? "is-active" : ""} onClick={() => setTool("eraser")} title={t("present.eraserTitle")}>
+              <Eraser size={14} /> {t("present.eraser")}
             </button>
           </div>
-          <button type="button" className={`presentation-icon ${guideOpen ? "is-active" : ""}`} onClick={() => setGuideOpen((value) => !value)} title="강의 가이드">
-            <Square size={15} /> 가이드
+          <button type="button" className={`presentation-icon ${guideOpen ? "is-active" : ""}`} onClick={() => setGuideOpen((value) => !value)} title={t("present.guideTitle")}>
+            <Square size={15} /> {t("present.guide")}
           </button>
-          <button type="button" className="presentation-icon" onClick={toggleFullscreen} title="전체 화면">
+          <button type="button" className="presentation-icon" onClick={toggleFullscreen} title={t("present.fullscreenTitle")}>
             {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
           </button>
-          <button type="button" className="presentation-icon" onClick={onClose} title="발표 모드 종료 (ESC)">
+          <button type="button" className="presentation-icon" onClick={onClose} title={t("present.exitTitle")}>
             <X size={17} />
           </button>
         </div>
       </div>
 
       <div className="presentation-stage-wrap">
-        <div className={`presentation-stage ${guideOpen ? "with-guide" : ""}`}>
-          <canvas ref={stageRef} width={CANVAS_WIDTH} height={CANVAS_HEIGHT} className="presentation-canvas" />
+        <div
+          className={`presentation-stage ${guideOpen ? "with-guide" : ""} ${
+            store.aspect === "9:16" ? "is-vertical" : ""
+          }`}
+        >
+          <canvas
+            ref={stageRef}
+            width={profile.width}
+            height={profile.height}
+            className={`presentation-canvas ${store.aspect === "9:16" ? "is-vertical" : ""}`}
+          />
           <canvas
             ref={overlayRef}
-            width={CANVAS_WIDTH}
-            height={CANVAS_HEIGHT}
+            width={profile.width}
+            height={profile.height}
             className={`annotation-canvas tool-${tool}`}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
@@ -360,14 +393,14 @@ export function PresentationMode({ project, open, startScene, onClose }: Present
             <div className="guide-head">
               <span className="panel-label">
                 <Mic2 size={14} />
-                강의 가이드
+                {t("present.guideTitle")}
               </span>
-              <button type="button" className="icon-button" onClick={() => setGuideOpen(false)} aria-label="가이드 닫기">
+              <button type="button" className="icon-button" onClick={() => setGuideOpen(false)} aria-label={t("present.guideClose")}>
                 <X size={14} />
               </button>
             </div>
             <div className="guide-scene-title">
-              <small>{scene.type === "intro" ? "도입" : scene.type === "outro" ? "정리" : "전개"}</small>
+              <small>{scene.type === "intro" ? t("present.sceneIntro") : scene.type === "outro" ? t("present.sceneOutro") : t("present.sceneBody")}</small>
               <strong>{scene.title}</strong>
               <p>{scene.subtitle}</p>
             </div>
@@ -391,7 +424,7 @@ export function PresentationMode({ project, open, startScene, onClose }: Present
               ))}
             </div>
             <div className="guide-tip">
-              <strong>발문 팁</strong>
+              <strong>{t("present.tipTitle")}</strong>
               <p>{beat ? `“${beat.narration}”` : ""}</p>
             </div>
           </aside>
@@ -402,10 +435,10 @@ export function PresentationMode({ project, open, startScene, onClose }: Present
         <div className="presentation-bottom-left">
           <button type="button" className="presentation-narrate" onClick={toggleNarration}>
             <Volume2 size={15} />
-            {isNarrating ? "나레이션 정지" : "내레이션 듣기"}
+            {isNarrating ? t("present.narrationStop") : t("present.narrationPlay")}
           </button>
           <span className="shortcut-hint">
-            단축키: <b>←</b> 이전 씬 <b>→</b> 다음 씬 <b>1/2/3</b> 판서 <b>L</b> 레이저 <b>P</b> 펜 <b>C</b> 지우기
+            {t("present.shortcutLabel")} <b>←</b> {t("present.prevScene")} <b>→</b> {t("present.nextScene")} <b>1/2/3</b> {t("present.shortcutReveal")} <b>L</b> {t("present.laser")} <b>P</b> {t("present.pen")} <b>C</b> {t("present.eraser")}
           </span>
         </div>
         <div className="presentation-bottom-center">
@@ -414,7 +447,7 @@ export function PresentationMode({ project, open, startScene, onClose }: Present
             className="presentation-nav"
             onClick={() => setSceneIndex((value) => Math.max(0, value - 1))}
             disabled={sceneIndex === 0}
-            aria-label="이전 씬"
+            aria-label={t("present.prevScene")}
           >
             <ChevronLeft size={18} />
           </button>
@@ -424,7 +457,7 @@ export function PresentationMode({ project, open, startScene, onClose }: Present
               type="button"
               className={`presentation-dot ${index === sceneIndex ? "is-active" : ""}`}
               onClick={() => setSceneIndex(index)}
-              aria-label={`${index + 1}번째 씬`}
+              aria-label={t("present.sceneAria", { index: index + 1 })}
             />
           ))}
           <button
@@ -432,13 +465,13 @@ export function PresentationMode({ project, open, startScene, onClose }: Present
             className="presentation-nav"
             onClick={() => setSceneIndex((value) => Math.min(project.scenes.length - 1, value + 1))}
             disabled={sceneIndex === project.scenes.length - 1}
-            aria-label="다음 씬"
+            aria-label={t("present.nextScene")}
           >
             <ChevronRight size={18} />
           </button>
         </div>
         <span className="presentation-count">
-          <strong>{sceneIndex + 1}</strong> / {project.scenes.length} 씬
+          <strong>{sceneIndex + 1}</strong> / {project.scenes.length} {t("present.sceneUnit")}
         </span>
       </div>
     </div>,

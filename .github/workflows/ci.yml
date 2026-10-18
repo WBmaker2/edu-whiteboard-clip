@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Unit tests
+        run: npm run test:run
+      - name: Build
+        run: npm run build
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Start dev server
+        run: |
+          npm run dev -- --port 5173 > /tmp/vite.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:5173 > /dev/null; then
+              echo "dev server ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "dev server failed to start"
+          cat /tmp/vite.log
+          exit 1
+      - name: QA smoke
+        run: npm run qa:smoke
+      - name: QA v2
+        run: npm run qa:v2
+      - name: QA AI (mocked)
+        run: npm run qa:ai
+      - name: QA accessibility
+        run: npm run qa:a11y

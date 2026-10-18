@@ -1,4 +1,5 @@
 import { useMemo, useRef } from "react";
+import { useShallow } from "zustand/react/shallow";
 import {
   Captions,
   Languages,
@@ -14,6 +15,7 @@ import {
 import { useStudioStore } from "../store/studioStore";
 import { BGM_PRESETS, CAPTION_LANGUAGES } from "../data/presets";
 import { formatClock } from "../lib/time";
+import { useI18n } from "../lib/i18n";
 
 interface PlayerControlsProps {
   time: number;
@@ -42,7 +44,19 @@ export function PlayerControls({
   onLanguageChange,
   onReplay,
 }: PlayerControlsProps) {
-  const store = useStudioStore();
+  const { t } = useI18n();
+  const store = useStudioStore(
+    useShallow((state) => ({
+      captions: state.captions,
+      captionLang: state.captionLang,
+      bgmId: state.bgmId,
+      bgmVolume: state.bgmVolume,
+      penTip: state.penTip,
+      sfx: state.sfx,
+      patch: state.patch,
+      setBgmId: state.setBgmId,
+    })),
+  );
   const trackRef = useRef<HTMLDivElement | null>(null);
 
   const markers = useMemo(() => {
@@ -70,7 +84,7 @@ export function PlayerControls({
         ref={trackRef}
         onClick={(event) => seekFromEvent(event.clientX)}
         role="slider"
-        aria-label="재생 위치"
+        aria-label={t("player.position")}
         aria-valuemin={0}
         aria-valuemax={Math.round(duration)}
         aria-valuenow={Math.round(time)}
@@ -96,10 +110,10 @@ export function PlayerControls({
 
       <div className="controls-row">
         <div className="controls-group">
-          <button type="button" className="control-button play-button" onClick={onToggle} aria-label={isPlaying ? "일시정지" : "재생"}>
+          <button type="button" className="control-button play-button" onClick={onToggle} aria-label={isPlaying ? t("player.pause") : t("player.play")}>
             {isPlaying ? <Pause size={18} /> : <Play size={18} />}
           </button>
-          <button type="button" className="control-icon" onClick={onReplay} aria-label="처음부터 다시 재생">
+          <button type="button" className="control-icon" onClick={onReplay} aria-label={t("player.replay")}>
             <RotateCcw size={16} />
           </button>
           <span className="time-readout">
@@ -108,7 +122,7 @@ export function PlayerControls({
           </span>
         </div>
 
-        <div className="controls-group rate-group" aria-label="재생 속도">
+        <div className="controls-group rate-group" aria-label={t("player.rate")}>
           {[0.75, 1, 1.25, 1.5].map((value) => (
             <button
               key={value}
@@ -127,18 +141,18 @@ export function PlayerControls({
             className={`pill-toggle ${store.captions ? "is-active" : ""}`}
             onClick={() => store.patch({ captions: !store.captions })}
             aria-pressed={store.captions}
-            title="화면 자막 켜기/끄기"
+            title={t("player.captions")}
           >
             <Captions size={15} />
             CC
           </button>
 
-          <label className="select-pill" title="자막 표출 언어">
+          <label className="select-pill" title={t("player.captionLang")}>
             <Languages size={15} />
             <select
               value={store.captionLang}
               onChange={(event) => onLanguageChange(event.target.value)}
-              aria-label="자막 언어"
+              aria-label={t("player.captionLang")}
             >
               {CAPTION_LANGUAGES.map((language) => (
                 <option key={language.code} value={language.code}>
@@ -148,14 +162,14 @@ export function PlayerControls({
             </select>
           </label>
 
-          <label className="select-pill" title="배경 음악">
+          <label className="select-pill" title={t("player.bgm")}>
             <Music2 size={15} />
             <select
               value={store.bgmId}
               onChange={(event) => {
-                store.patch({ bgmId: event.target.value });
+                store.setBgmId(event.target.value);
               }}
-              aria-label="배경 음악"
+              aria-label={t("player.bgm")}
             >
               {BGM_PRESETS.map((preset) => (
                 <option key={preset.id} value={preset.id}>
@@ -166,7 +180,7 @@ export function PlayerControls({
           </label>
 
           {store.bgmId !== "none" && (
-            <label className="volume-pill" title={`배경음 볼륨 ${Math.round(store.bgmVolume * 100)}%`}>
+            <label className="volume-pill" title={`${t("player.bgmVolume")} ${Math.round(store.bgmVolume * 100)}%`}>
               {store.bgmVolume === 0 ? <VolumeX size={14} /> : <Volume2 size={14} />}
               <input
                 type="range"
@@ -175,7 +189,7 @@ export function PlayerControls({
                 step={0.05}
                 value={store.bgmVolume}
                 onChange={(event) => store.patch({ bgmVolume: Number(event.target.value) })}
-                aria-label="배경음 볼륨"
+                aria-label={t("player.bgmVolume")}
               />
             </label>
           )}
@@ -185,10 +199,10 @@ export function PlayerControls({
             className={`pill-toggle ${store.penTip ? "is-active" : ""}`}
             onClick={() => store.patch({ penTip: !store.penTip })}
             aria-pressed={store.penTip}
-            title="마커 펜촉 애니메이션"
+            title={t("player.penTip")}
           >
             <PenTool size={14} />
-            펜촉
+            {t("player.penTipLabel")}
           </button>
 
           <button
@@ -196,10 +210,10 @@ export function PlayerControls({
             className={`pill-toggle ${store.sfx ? "is-active" : ""}`}
             onClick={() => store.patch({ sfx: !store.sfx })}
             aria-pressed={store.sfx}
-            title="판서 효과음"
+            title={t("player.sfx")}
           >
             <Wand2 size={14} />
-            효과음
+            {t("player.sfxLabel")}
           </button>
         </div>
       </div>

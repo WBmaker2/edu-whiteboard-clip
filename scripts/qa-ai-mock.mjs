@@ -69,6 +69,8 @@ for (let i = 0; i < samples; i += 1) {
 }
 const audioB64 = pcm.toString("base64");
 
+const imageB64 = (await readFile(path.join(process.cwd(), "tests/fixtures/tiny-image.png"))).toString("base64");
+
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext({
   viewport: { width: 1440, height: 1000 },
@@ -81,6 +83,16 @@ page.on("console", (message) => {
   if (message.type() === "error") errors.push(message.text());
 });
 page.on("pageerror", (error) => errors.push(error.message));
+
+await page.route("**/v1beta/models/*:predict*", async (route) => {
+  await route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      predictions: [{ bytesBase64Encoded: imageB64, mimeType: "image/png" }],
+    }),
+  });
+});
 
 await page.route("**/v1beta/models/*:generateContent*", async (route) => {
   const url = route.request().url();
@@ -148,6 +160,20 @@ await page.getByRole("tab", { name: /2. 전개 1/ }).click();
 await page.waitForTimeout(400);
 await shotCanvas("05-infographic-blueprint.png");
 await page.screenshot({ path: path.join(OUT, "06-workspace.png"), fullPage: true });
+
+await page.getByRole("button", { name: "대본/판서 수정" }).first().click();
+await page.getByRole("button", { name: "AI 이미지" }).first().click();
+await page.getByPlaceholder(/만들고 싶은 이미지를 설명하세요/).fill("광합성 과정 손그림 다이어그램");
+await page.getByRole("button", { name: "이미지 생성" }).click();
+await page.waitForSelector(".beat-visual-thumb:not(.is-empty)", { timeout: 20000 });
+await page.waitForTimeout(300);
+const aiKind = await page.locator(".beat-visual-kind").first().textContent();
+check("ai image kind", aiKind?.trim() === "AI 이미지", aiKind ?? "none");
+await page.getByRole("button", { name: "저장", exact: true }).click();
+await page.waitForTimeout(400);
+await page.screenshot({ path: path.join(OUT, "06b-ai-image.png"), fullPage: true });
+const aiThumbs = await page.locator(".beat-preview-thumb").count();
+check("ai image persisted", aiThumbs > 0, `${aiThumbs} previews`);
 
 const exportDownload = page.waitForEvent("download", { timeout: 30000 }).catch(() => null);
 await page.getByRole("button", { name: "비디오 내보내기" }).click();

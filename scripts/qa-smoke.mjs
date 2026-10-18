@@ -48,7 +48,7 @@ await page.getByRole("button", { name: "JSON 내보내기" }).click();
 const jsonDownload = await downloadJson;
 await jsonDownload.saveAs(path.join(OUT, "project.json"));
 const exported = JSON.parse(await readFile(path.join(OUT, "project.json"), "utf8"));
-check("json export", exported.version === 1 && exported.scenes.length === 5);
+check("json export", exported.version === 2 && exported.scenes.length === 5);
 
 const downloadSrt = page.waitForEvent("download", { timeout: 20000 });
 await page.locator('button[title*="SRT 자막"]').click();
@@ -105,7 +105,7 @@ await page.screenshot({ path: path.join(OUT, "07-presentation.png") });
 await page.keyboard.press("Escape");
 
 const fixture = path.resolve("tests/fixtures/short-project.json");
-await page.locator('input[type="file"]').setInputFiles(fixture);
+await page.locator('[data-testid="project-import"]').setInputFiles(fixture);
 await page.waitForTimeout(600);
 check("import", (await page.getByRole("tab", { name: /1. 도입/ }).count()) > 0);
 

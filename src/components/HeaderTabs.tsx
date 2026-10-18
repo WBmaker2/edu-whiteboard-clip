@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import {
   ChevronDown,
   FolderOpen,
@@ -8,9 +8,11 @@ import {
   PenLine,
   ShieldCheck,
   Sparkles,
+  WifiOff,
 } from "lucide-react";
 import type { Project } from "../types/project";
-import { APP_NAME } from "../data/presets";
+import { useOnlineStatus } from "../hooks/useOnlineStatus";
+import { useI18n } from "../lib/i18n";
 
 export type StudioTab = "settings" | "monitor";
 
@@ -35,6 +37,10 @@ export function HeaderTabs({
 }: HeaderTabsProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const menuButtonRef = useRef<HTMLButtonElement | null>(null);
+  const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const isOnline = useOnlineStatus();
+  const { t } = useI18n();
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -45,6 +51,52 @@ export function HeaderTabs({
     return () => window.removeEventListener("mousedown", close);
   }, [menuOpen]);
 
+  const closeMenu = (focusButton = false) => {
+    setMenuOpen(false);
+    if (focusButton) menuButtonRef.current?.focus();
+  };
+
+  const openMenuWithFocus = () => {
+    setMenuOpen(true);
+    window.requestAnimationFrame(() => itemRefs.current[0]?.focus());
+  };
+
+  const onMenuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const items = itemRefs.current.filter(
+      (item): item is HTMLButtonElement => Boolean(item),
+    );
+    if (items.length === 0) return;
+    const currentIndex = items.findIndex((item) => item === document.activeElement);
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeMenu(true);
+      return;
+    }
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      items[(currentIndex + 1 + items.length) % items.length]?.focus();
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      items[(currentIndex - 1 + items.length) % items.length]?.focus();
+      return;
+    }
+    if (event.key === "Home") {
+      event.preventDefault();
+      items[0]?.focus();
+      return;
+    }
+    if (event.key === "End") {
+      event.preventDefault();
+      items[items.length - 1]?.focus();
+      return;
+    }
+    if (event.key === "Tab") {
+      setMenuOpen(false);
+    }
+  };
+
   return (
     <header className="site-header">
       <div className="header-top">
@@ -53,37 +105,59 @@ export function HeaderTabs({
             <PenLine size={22} strokeWidth={2.2} />
           </span>
           <span className="brand-text">
-            <strong>{APP_NAME}</strong>
-            <span className="brand-badge">AI 스튜디오</span>
+            <strong>{t("app.brand")}</strong>
+            <span className="brand-badge">{t("app.badge")}</span>
           </span>
         </div>
 
         <div className="header-actions">
           <span className="chip chip-soft">
             <Sparkles size={13} />
-            AI 교육자료
+            {t("header.aiChip")}
           </span>
           <span className="chip chip-muted hide-sm">
             <ShieldCheck size={13} />
-            브라우저에서만 처리
+            {t("header.localChip")}
           </span>
+          {!isOnline && (
+            <span className="chip chip-warn" role="status">
+              <WifiOff size={13} />
+              {t("header.offlineChip")}
+            </span>
+          )}
 
           <div className="project-menu" ref={menuRef}>
             <button
+              ref={menuButtonRef}
               type="button"
               className="ghost-button"
               onClick={() => setMenuOpen((open) => !open)}
+              onKeyDown={(event) => {
+                if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                  event.preventDefault();
+                  openMenuWithFocus();
+                }
+                if (event.key === "Escape" && menuOpen) {
+                  event.preventDefault();
+                  closeMenu();
+                }
+              }}
               aria-expanded={menuOpen}
+              aria-haspopup="menu"
             >
               <FolderOpen size={16} />
-              <span>프로젝트</span>
+              <span>{t("header.project")}</span>
               <ChevronDown size={14} />
             </button>
             {menuOpen && (
-              <div className="project-dropdown" role="menu">
+              <div className="project-dropdown" role="menu" onKeyDown={onMenuKeyDown}>
                 <button
+                  ref={(element) => {
+                    itemRefs.current[0] = element;
+                  }}
                   type="button"
                   role="menuitem"
+                  tabIndex={-1}
                   onClick={() => {
                     setMenuOpen(false);
                     onNewProject();
@@ -91,13 +165,17 @@ export function HeaderTabs({
                 >
                   <Sparkles size={15} />
                   <span>
-                    <strong>새 프로젝트</strong>
-                    <small>현재 작업을 비우고 새로 시작</small>
+                    <strong>{t("header.newProject")}</strong>
+                    <small>{t("header.newProjectDesc")}</small>
                   </span>
                 </button>
                 <button
+                  ref={(element) => {
+                    itemRefs.current[1] = element;
+                  }}
                   type="button"
                   role="menuitem"
+                  tabIndex={-1}
                   onClick={() => {
                     setMenuOpen(false);
                     onLoadDraft();
@@ -105,13 +183,17 @@ export function HeaderTabs({
                 >
                   <FolderOpen size={15} />
                   <span>
-                    <strong>초안 불러오기</strong>
-                    <small>브라우저에 저장한 최근 작업</small>
+                    <strong>{t("header.loadDraft")}</strong>
+                    <small>{t("header.loadDraftDesc")}</small>
                   </span>
                 </button>
                 <button
+                  ref={(element) => {
+                    itemRefs.current[2] = element;
+                  }}
                   type="button"
                   role="menuitem"
+                  tabIndex={-1}
                   onClick={() => {
                     setMenuOpen(false);
                     onImportProject();
@@ -119,21 +201,21 @@ export function HeaderTabs({
                 >
                   <LayoutGrid size={15} />
                   <span>
-                    <strong>JSON 가져오기</strong>
-                    <small>프로젝트 파일 이어서 작업</small>
+                    <strong>{t("header.importJson")}</strong>
+                    <small>{t("header.importJsonDesc")}</small>
                   </span>
                 </button>
               </div>
             )}
           </div>
 
-          <button type="button" className="icon-button hide-sm" onClick={onShowShortcuts} aria-label="도움말">
+          <button type="button" className="icon-button hide-sm" onClick={onShowShortcuts} aria-label={t("header.help")}>
             <HelpCircle size={17} />
           </button>
         </div>
       </div>
 
-      <div className="tab-bar" role="tablist" aria-label="스튜디오 화면 전환">
+      <div className="tab-bar" role="tablist" aria-label={t("header.tabList")}>
         <button
           type="button"
           role="tab"
@@ -142,7 +224,7 @@ export function HeaderTabs({
           onClick={() => onTab("settings")}
         >
           <LayoutGrid size={16} />
-          스튜디오 설정
+          {t("header.tabSettings")}
         </button>
         <button
           type="button"
@@ -152,7 +234,7 @@ export function HeaderTabs({
           onClick={() => onTab("monitor")}
         >
           <MonitorPlay size={16} />
-          영상 모니터 &amp; 재생
+          {t("header.tabMonitor")}
           {project && <span className="tab-count">{project.scenes.length}</span>}
         </button>
       </div>

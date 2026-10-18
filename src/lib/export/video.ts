@@ -1,9 +1,10 @@
-import type { Project } from "../../types/project";
+import type { AspectRatio, Project } from "../../types/project";
 import { AudioEngine } from "../audioEngine";
 import { activeBeatIndex, locateTime, projectDuration } from "../time";
-import { CANVAS_WIDTH, renderScene } from "../renderer";
-import { RESOLUTIONS, type ResolutionId } from "../../data/presets";
-import { exportMp4, isMp4Supported } from "./mp4";
+import { canvasProfile, renderScene } from "../renderer";
+import { resolutionPreset, type ResolutionId } from "../../data/presets";
+import { ensureExportFonts } from "../fonts";
+import { preloadProjectImages } from "../assets";
 import { withWebmDuration } from "./webmDuration";
 
 const WEBM_MIME_CANDIDATES = [
@@ -24,10 +25,12 @@ export interface ExportVideoOptions {
   project: Project;
   format: "webm" | "mp4";
   resolution: ResolutionId;
+  aspect?: AspectRatio;
   captions: boolean;
   bgmVolume: number;
   translations?: string[][];
   captionLang: string;
+  penTip?: boolean;
   signal?: AbortSignal;
   onProgress?: (percent: number, message: string) => void;
   onFormatFallback?: (message: string) => void;
@@ -42,10 +45,12 @@ export interface ExportVideoResult {
 async function exportWebm({
   project,
   resolution,
+  aspect,
   captions,
   bgmVolume,
   translations,
   captionLang,
+  penTip,
   signal,
   onProgress,
 }: ExportVideoOptions): Promise<ExportVideoResult> {
@@ -56,7 +61,7 @@ async function exportWebm({
   if (!mimeType) {
     throw new Error("이 브라우저에서 사용할 수 있는 영상 형식이 없습니다. Chrome 최신 버전을 권장합니다.");
   }
-  const preset = RESOLUTIONS.find((item) => item.id === resolution) ?? RESOLUTIONS[0];
+  const preset = resolutionPreset(resolution, aspect ?? "16:9");
   const canvas = document.createElement("canvas");
   canvas.width = preset.width;
   canvas.height = preset.height;
@@ -66,7 +71,7 @@ async function exportWebm({
   document.body.appendChild(canvas);
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("캔버스를 초기화하지 못했습니다.");
-  const scale = preset.width / CANVAS_WIDTH;
+  const scale = preset.width / canvasProfile(aspect ?? "16:9").base;
   ctx.scale(scale, scale);
 
   const engine = new AudioEngine();
@@ -74,6 +79,8 @@ async function exportWebm({
   let raf = 0;
   try {
     onProgress?.(2, "오디오와 캔버스를 준비하는 중...");
+    await ensureExportFonts();
+    const assetImages = await preloadProjectImages(project);
     await engine.loadProject(project);
     await engine.ensure();
     engine.setMonitor(false);
@@ -88,6 +95,9 @@ async function exportWebm({
       captions,
       captionText: captions ? first.beats[0]?.narration : undefined,
       sceneIndex: 0,
+      penTip,
+      aspect,
+      assetImages,
     });
 
     const canvasStream = canvas.captureStream(30);
@@ -147,6 +157,9 @@ async function exportWebm({
             ? captionForLang?.[beatIndex] ?? scene.beats[beatIndex]?.narration
             : undefined,
           sceneIndex: index,
+          penTip,
+          aspect,
+          assetImages,
         });
         const percent = Math.min(95, 5 + Math.round((time / total) * 90));
         onProgress?.(percent, `${index + 1}/${project.scenes.length} 장면 인코딩 중...`);
@@ -161,6 +174,9 @@ async function exportWebm({
               ? lastScene.beats[lastScene.beats.length - 1]?.narration
               : undefined,
             sceneIndex: project.scenes.length - 1,
+            penTip,
+            aspect,
+            assetImages,
           });
           resolve();
           return;
@@ -198,12 +214,12 @@ export async function exportVideo(
   options: ExportVideoOptions,
 ): Promise<ExportVideoResult> {
   if (options.format === "mp4") {
-    const preset =
-      RESOLUTIONS.find((item) => item.id === options.resolution) ?? RESOLUTIONS[0];
-    const supported = await isMp4Supported(preset.width, preset.height);
+    const preset = resolutionPreset(options.resolution, options.aspect ?? "16:9");
+    const mp4 = await import("./mp4");
+    const supported = await mp4.isMp4Supported(preset.width, preset.height);
     if (supported) {
       try {
-        return await exportMp4(options);
+        return await mp4.exportMp4(options);
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") throw error;
         options.onFormatFallback?.(

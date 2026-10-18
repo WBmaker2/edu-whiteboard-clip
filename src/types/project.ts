@@ -11,12 +11,39 @@ export type LayoutStyle =
   | "comparison"
   | "infographic";
 
+export type AspectRatio = "16:9" | "9:16";
+
+export type AssetKind = "image" | "formula" | "ai";
+
+export type AssetSource = "upload" | "formula" | "ai";
+
+export interface AssetMeta {
+  id: string;
+  kind: AssetKind;
+  source: AssetSource;
+  mime: string;
+  blob?: Blob;
+  url?: string;
+  width?: number;
+  height?: number;
+  /** Original LaTeX source for formula assets, kept so it can be re-edited. */
+  latex?: string;
+  name?: string;
+}
+
+export interface BeatVisual {
+  kind: "image" | "formula" | "ai";
+  assetId: string;
+  caption?: string;
+}
+
 export interface Beat {
   id: string;
   label: string;
   desc: string;
   narration: string;
   iconType: string;
+  visual?: BeatVisual;
 }
 
 export interface Scene {
@@ -45,11 +72,13 @@ export interface DraftSnapshot {
 }
 
 export interface Project {
-  version: 1;
+  version: 2;
   topic: string;
   themeId: ThemeId;
   visualStyle: VisualStyle;
   layoutStyle: LayoutStyle;
+  aspect: AspectRatio;
+  assets: Record<string, AssetMeta>;
   voice: string;
   model: string;
   ttsModel: string;

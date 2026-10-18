@@ -2,6 +2,7 @@ import type { Beat, Scene } from "../types/project";
 import { ICON_KEYS, MODEL_FALLBACKS } from "../data/presets";
 import { callGemini } from "./gemini";
 import { normalizeBeat, normalizeIcon } from "./storyboard";
+import { curriculumPromptBlock, type CurriculumContext } from "../data/curriculum";
 
 export interface RewritePreset {
   id: string;
@@ -34,6 +35,7 @@ export interface RewriteSceneOptions {
   nextTitle?: string;
   instruction: string;
   beatCount: number;
+  curriculum?: CurriculumContext;
   onFallback?: (model: string) => void;
 }
 
@@ -46,6 +48,7 @@ export function rewritePrompt(options: {
   nextTitle?: string;
   instruction: string;
   beatCount: number;
+  curriculum?: CurriculumContext;
 }): string {
   const current = {
     type: options.scene.type,
@@ -60,7 +63,7 @@ export function rewritePrompt(options: {
   };
   return `You are revising ONE scene of a Korean whiteboard lesson about "${options.topic}".
 Scene position: ${options.sceneIndex + 1} of ${options.totalScenes}.
-Previous scene title: ${options.previousTitle ?? "(none)"}
+${curriculumPromptBlock(options.curriculum)}Previous scene title: ${options.previousTitle ?? "(none)"}
 Next scene title: ${options.nextTitle ?? "(none)"}
 Current scene JSON:
 ${JSON.stringify(current)}
@@ -145,6 +148,7 @@ export async function rewriteScene(
                 previousTitle: options.previousTitle,
                 nextTitle: options.nextTitle,
                 instruction: options.instruction,
+                curriculum: options.curriculum,
                 beatCount: options.beatCount,
               }),
             },

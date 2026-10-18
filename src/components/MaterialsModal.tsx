@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { Download, Image, Loader2, Sparkles } from "lucide-react";
+import { useShallow } from "zustand/react/shallow";
 import type { Project } from "../types/project";
 import { Modal } from "./Modal";
 import { buildMaterials, type MaterialImage } from "../lib/export/materials";
-import { downloadBlob } from "../lib/export/image";
+import { downloadBlob } from "../lib/download";
 import { useStudioStore } from "../store/studioStore";
+import { useI18n } from "../lib/i18n";
 
 interface MaterialsModalProps {
   open: boolean;
@@ -13,7 +15,12 @@ interface MaterialsModalProps {
 }
 
 export function MaterialsModal({ open, project, onClose }: MaterialsModalProps) {
-  const store = useStudioStore();
+  const { t } = useI18n();
+  const store = useStudioStore(
+    useShallow((state) => ({
+      pushToast: state.pushToast,
+    })),
+  );
   const [loading, setLoading] = useState(false);
   const [thumbnail, setThumbnail] = useState<MaterialImage | null>(null);
   const [cards, setCards] = useState<MaterialImage[]>([]);
@@ -34,7 +41,7 @@ export function MaterialsModal({ open, project, onClose }: MaterialsModalProps) 
         if (!cancelled) {
           store.pushToast(
             "error",
-            error instanceof Error ? error.message : "자료 이미지를 만들지 못했습니다.",
+            error instanceof Error ? error.message : t("materials.buildFailed"),
           );
         }
       })
@@ -61,21 +68,21 @@ export function MaterialsModal({ open, project, onClose }: MaterialsModalProps) 
       open={open}
       onClose={onClose}
       size="wide"
-      title="썸네일 & 카드뉴스"
-      subtitle="유튜브용 16:9 썸네일과 SNS 배포용 1:1 카드뉴스를 만듭니다."
+      title={t("materials.title")}
+      subtitle={t("materials.subtitle")}
       icon={<Image size={19} />}
       actions={
         <button type="button" className="primary-button small" onClick={downloadAll} disabled={loading || !thumbnail}>
           <Download size={14} />
-          전체 다운로드
+          {t("materials.downloadAll")}
         </button>
       }
     >
       {loading ? (
         <div className="materials-loading">
           <Loader2 size={26} className="spin" />
-          <strong>이미지를 그리는 중...</strong>
-          <p>현재 테마와 스토리보드를 캔버스에 렌더링합니다.</p>
+          <strong>{t("materials.building")}</strong>
+          <p>{t("materials.buildingDesc")}</p>
         </div>
       ) : (
         <div className="materials-shell">
@@ -84,7 +91,7 @@ export function MaterialsModal({ open, project, onClose }: MaterialsModalProps) 
               <div className="material-heading">
                 <span className="panel-label">
                   <Sparkles size={14} />
-                  16:9 유튜브 썸네일
+                  {t("materials.youtubeThumb")}
                 </span>
                 <button
                   type="button"
@@ -92,31 +99,31 @@ export function MaterialsModal({ open, project, onClose }: MaterialsModalProps) 
                   onClick={() => downloadBlob(thumbnail.blob, "panseolab_thumbnail.png")}
                 >
                   <Download size={13} />
-                  PNG 저장
+                  {t("materials.savePng")}
                 </button>
               </div>
-              <img src={thumbnail.dataUrl} alt="프로젝트 썸네일 미리보기" className="material-thumbnail" />
+              <img src={thumbnail.dataUrl} alt={t("materials.thumbAlt")} className="material-thumbnail" />
             </section>
           )}
 
           <section className="material-section">
             <div className="material-heading">
-              <span className="panel-label">1:1 카드뉴스 {cards.length}장</span>
-              <span className="panel-hint">장면별 핵심 포인트를 한 장에 담았습니다</span>
+              <span className="panel-label">{t("materials.cardsTitle", { count: cards.length })}</span>
+              <span className="panel-hint">{t("materials.cardsHint")}</span>
             </div>
             <div className="card-grid">
               {cards.map((card, index) => (
                 <article className="card-preview" key={card.id}>
-                  <img src={card.dataUrl} alt={`${index + 1}번째 카드뉴스`} />
+                  <img src={card.dataUrl} alt={t("materials.cardIndexAlt", { index: index + 1 })} />
                   <div className="card-preview-meta">
-                    <span>카드 {index + 1}</span>
+                    <span>{t("materials.card", { index: index + 1 })}</span>
                     <button
                       type="button"
                       className="mini-button"
                       onClick={() => downloadBlob(card.blob, `panseolab_card_${index + 1}.png`)}
                     >
                       <Download size={12} />
-                      저장
+                      {t("materials.save")}
                     </button>
                   </div>
                 </article>

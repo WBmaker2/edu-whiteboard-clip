@@ -3,9 +3,9 @@ const urlByBlob = new WeakMap<Blob, string>();
 /**
  * Keeps one object URL per Blob for the whole session. Undo/redo and history
  * snapshots share Blobs, so URLs must stay valid even after an edit replaces
- * the current scene audio.
+ * the current asset.
  */
-export function audioUrlFor(blob?: Blob | null): string | undefined {
+export function blobUrlFor(blob?: Blob | null): string | undefined {
   if (!blob) return undefined;
   const cached = urlByBlob.get(blob);
   if (cached) return cached;
@@ -15,7 +15,7 @@ export function audioUrlFor(blob?: Blob | null): string | undefined {
 }
 
 /** Only call during full teardown; history may still reference older blobs. */
-export function releaseAudioUrl(blob?: Blob | null): void {
+export function releaseBlobUrl(blob?: Blob | null): void {
   if (!blob) return;
   const cached = urlByBlob.get(blob);
   if (cached) {

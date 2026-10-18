@@ -53,6 +53,18 @@
 - 배경 음악 3종(절차 합성), 볼륨·자동 덕킹
 - 자막 언어 선택 및 Gemini 자동 번역(선택)
 
+### 공유·배포 · 확장 (V3)
+- 읽기 전용 공유 링크: 프로젝트 데이터를 URL에 압축해 서버 없이 공유(오디오·이미지 제외, 8KB 가드)
+- 학생용 퀴즈 링크: 기기 내 채점, 결과 이미지/JSON 저장, 서버 미전송
+- 이미지·수식 삽입: 장면 비트마다 사진 첨부 또는 LaTeX 수식(KaTeX)을 테이프 사진 스타일로 표시
+- AI 이미지 생성: 비트에 설명을 입력하면 Gemini가 그림을 만들어 판서와 함께 표시(Imagen 우선, 무료 티어는 Gemini 이미지 모델로 자동 대체)
+- 세로 9:16 숏폼: 세로 스택 배치와 1080×1920 MP4/WebM 내보내기
+- PWA: 설치형 사용과 오프라인 편집·재생·내보내기(오프라인 배너 표시)
+- 내 템플릿: 주제·테마·연출·비율 저장, JSON 파일로 주고받기
+- 표시 언어 한국어/영어 전환(주요 창 전체), 학교급·교과·성취기준 프롬프트 연계
+- WebM→MP4 변환(ffmpeg.wasm): H.264 없는 브라우저용, 최초 1회 약 31MB 다운로드
+- SVG 벡터 시트 내보내기(간이 레이아웃)
+
 ## 시작하기
 
 ```bash
@@ -83,7 +95,15 @@ npm run dev
 | `npm run qa:ai` | AI 생성 모킹 포함 브라우저 테스트 |
 | `npm run qa:v2` | 장면 편집·자동 저장·Undo·AI 재작성·WebM duration QA |
 | `npm run qa:layouts` | 5비트 기준 연출 레이아웃 렌더링 QA |
+| `npm run qa:pixel` | 캔버스 렌더러 골든 픽셀 비교(리팩터링 안전망, macOS 기준 골든) |
+| `npm run qa:a11y` | axe 기반 접근성 검사(심각·치명 위반 0 목표) |
+| `npm run qa:media` | 이미지·수식·SVG·JSON 왕복 수업자료 QA |
+| `npm run qa:share` | 공유 링크 생성·뷰어 재생·가져오기 QA |
+| `npm run qa:quiz` | 학생용 퀴즈 링크·채점·결과 저장 QA |
+| `npm run qa:pwa` | 빌드 미리보기에서 서비스 워커·오프라인 동작 QA |
+| `npm run qa:ffmpeg` | WebM→MP4(ffmpeg.wasm) 변환 QA (약 31MB 최초 다운로드, 로컬 전용) |
 | `npm run qa:mp4` | MP4(H.264/AAC) 내보내기 QA (H.264를 지원하는 Chrome 실행 파일 필요) |
+| `npm run qa:all` | 스모크·V2·AI·수업자료·접근성·PWA QA 연속 실행 |
 
 브라우저 테스트는 Playwright Chromium을 사용하며, 최초 1회 `npx playwright install chromium`이 필요합니다.
 개발 서버가 다른 포트에서 실행 중이면 `QA_BASE_URL=http://localhost:포트 npm run qa:smoke`처럼 주소를 지정할 수 있습니다.
@@ -95,14 +115,22 @@ Playwright Chromium은 H.264 인코더가 없어 MP4 QA는 Chrome for Testing �
 ```
 src/
   App.tsx                     # 화면 오케스트레이션, 생성/내보내기 흐름
-  components/                 # 헤더, 설정, 모니터, 큐시트, 모달, 발표 모드
+  components/                 # 헤더, 설정, 모니터, 큐시트, 모달, 발표 모드, 오류 경계
   data/presets.ts             # 테마·표현·연출·모델·보이스·BGM 정의
   data/demoProject.ts         # API 키 없는 예시 프로젝트
   hooks/usePlayback.ts        # 캔버스 + WebAudio 재생 루프
   hooks/useRecorder.ts        # 내 목소리 녹음
-  lib/gemini.ts               # Gemini REST 호출, 폴백, 키 마스킹
-  lib/geminiQueue.ts          # 무료 티어 요청 큐·백오프
+  lib/gemini.ts               # Gemini REST 호출, 폴백, 키 마스킹, 타임아웃·취소
+  lib/geminiQueue.ts          # 무료 티어 요청 큐·백오프·타임아웃
   lib/requestBudget.ts        # 예상 호출 수·세션 사용량
+  lib/fonts.ts                # 내보내기 전 글꼴 로딩 대기
+  lib/download.ts             # 파일 내려받기·파일명 정리 공용 헬퍼
+  lib/assets.ts               # 이미지·수식 에셋 생성·디코딩·사전 로드
+  lib/i18n.ts                 # 한국어/영어 사전과 t() 헬퍼
+  lib/templates.ts            # 사용자 템플릿 저장·내보내기·가져오기
+  lib/share.ts                # 공유 링크·퀴즈 링크 인코딩/디코딩
+  lib/imageGen.ts             # AI 이미지 생성(Imagen/Gemini 이미지 모델, 대기열·대체 경로)
+  lib/narration.ts            # 장면 나레이션 음성 생성 공용 헬퍼
   lib/storyboard.ts           # 프롬프트, JSON 정규화·검증
   lib/rewrite.ts              # 장면 단위 AI 재작성
   lib/sceneOps.ts             # 씬/비트 편집, 오디오 stale 판정
@@ -110,30 +138,42 @@ src/
   lib/bgm.ts                  # 절차 BGM 스케줄러(온라인/오프라인 공용)
   lib/tts.ts                  # PCM→WAV, 무음 분석, 비트 윈도우
   lib/audioEngine.ts          # WebAudio 재생·믹싱·BGM·덕킹·녹음 스트림
-  lib/renderer/               # 1920×1080 캔버스 렌더러와 아이콘
-  lib/export/                 # WebM·MP4·SRT·JSON·이미지·수업 자료 내보내기
+  lib/renderer/               # 캔버스 렌더러(코어·배경·스케치·가로/세로 레이아웃)와 아이콘
+  lib/export/                 # WebM·MP4(워커)·ffmpeg 변환·SVG·SRT·JSON·이미지·수업 자료
   lib/worksheet.ts, quiz.ts   # 학습지·퀴즈 로컬 생성
   store/studioStore.ts        # Zustand 스토어(설정 영속화·히스토리)
+  styles/                     # 기본·스튜디오·모니터·창·반응형 스타일 분할
 ```
 
 ## 브라우저 지원과 한계
 
 - Chrome/Edge 최신 버전 권장. Safari는 일부 미디어 기능이 제한될 수 있습니다.
 - WebM(VP9/Opus)은 모든 최신 브라우저에서 동작하며, duration 메타데이터를 보정해 저장합니다.
-- MP4(H.264/AAC)는 WebCodecs 인코더가 있는 브라우저(Chrome/Edge, Chrome for Testing)에서 오프라인으로 빠르게 생성됩니다. H.264 인코더가 없는 Chromium 빌드에서는 자동으로 WebM으로 대체됩니다.
+- MP4(H.264/AAC)는 WebCodecs 인코더가 있는 브라우저(Chrome/Edge, Chrome for Testing)에서 백그라운드 워커로 인코딩되어 내보내는 동안 화면이 덜 멈춥니다. 워커를 쓸 수 없는 환경에서는 기존 방식으로 자동 전환됩니다.
 - WebM 내보내기는 실제 재생 시간만큼 걸립니다. MP4는 재생 시간보다 빠르게 끝나지만 완료까지 탭을 닫지 마세요.
 - 내 목소리 녹음은 마이크 권한이 필요합니다.
 - 프로젝트 초안은 브라우저 IndexedDB에 저장됩니다. 브라우저 데이터를 삭제하면 사라집니다.
 - API 키는 브라우저에서 Gemini로 직접 전송됩니다. 공용 PC에서는 “브라우저에만 키 저장”을 해제하세요.
 - 다국어 자막 번역과 AI 서술형 첨삭에는 Gemini API 키가 필요합니다.
+- 표시 언어(한국어/영어)는 주요 창에 적용되며, 일부 교과·성취기준 데이터 라벨은 한국어로 표시됩니다.
+- AI 이미지 생성은 Gemini 이미지 모델을 사용하며 무료 티어 한도(분당·일일 요청 수)의 영향을 받습니다. 한도가 막히면 업로드·수식 삽입을 사용하세요.
+- 공유 링크는 오디오·이미지를 포함하지 않으며(URL 8KB 가드), 훨씬 큰 프로젝트는 JSON 파일 공유를 사용합니다.
+- WebM→MP4 변환은 최초 1회 약 31MB 도구를 내려받으며 로컬 변환이라 영상 길이에 따라 시간이 걸립니다.
+- 학생용 퀴즈 결과는 서버에 수집되지 않아 학생이 결과 파일을 직접 제출해야 합니다.
 
 ## 테스트
 
-- Vitest 44개 단위 테스트: 시간 계산, 스토리보드 정규화, WAV·윈도우, SRT, JSON 왕복, 학습지·퀴즈, 앱 렌더, 히스토리, 씬/비트 편집, 요청 큐, 장면 재작성, 오디오 stale 판정
+- Vitest 75개 단위 테스트: 시간 계산, 스토리보드 정규화, WAV·윈도우, SRT, JSON 왕복(v1 마이그레이션·v2 에셋 포함), 학습지·퀴즈, 앱 렌더, 히스토리, 씬/비트 편집, 요청 큐(타임아웃·취소), 장면 재작성, 오디오 stale 판정, 파일명 정리, 설정 동기화, 오류 경계, i18n 사전 일치, 교육과정 프롬프트, AI 이미지 응답 처리·모델 선택
 - Playwright 스모크 17개: 예시 재생, JSON/SRT/PNG 내보내기, 초안 저장·불러오기, 학습지·퀴즈·자료·발표 모드, JSON 가져오기, 영상 내보내기, 모바일
 - Playwright AI 모킹 5개: 스토리보드+TTS 파이프라인, 테마·레이아웃 전환, 오디오 포함 영상 내보내기
 - Playwright V2 26개: 장면 추가/이동, 비트 추가, Undo/Redo, 자동 저장·초안 복원, AI 재작성 diff·적용·stale 배지, 저장 기록, WebM duration, 모바일 오버플로
 - Playwright MP4 4개: H.264/AAC 코덱, 확장자, duration 검증(Chrome for Testing)
+- Playwright 접근성: axe로 설정·모니터·도움말·저장 기록 화면 검사(심각·치명 위반 0)
+- Playwright 픽셀 회귀 9개: 레이아웃 4종·포스터·아웃트로 + 세로 인트로/장면 골든 비교(`QA_PIXEL_UPDATE=1`로 골든 갱신)
+- Playwright 수업자료: 수식 입력·이미지 첨부·재생 반영·JSON 왕복·SVG 내보내기·영상 내보내기
+- Playwright 공유·퀴즈: 링크 생성/뷰어/가져오기, 퀴즈 채점·결과 저장
+- Playwright PWA: 서비스 워커·오프라인 재로드·오프라인 배지
+- Playwright ffmpeg: WebM→MP4 변환(약 31MB 최초 다운로드, 로컬 전용)
 
 ## 라이선스와 고지
 
