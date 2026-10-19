@@ -90,7 +90,13 @@ await page.screenshot({ path: path.join(OUT, "05-quiz.png") });
 await page.keyboard.press("Escape");
 
 await page.getByRole("button", { name: "썸네일/카드" }).click();
-await page.waitForTimeout(1400);
+await page
+  .waitForFunction(
+    () => document.querySelectorAll(".card-preview").length === 5,
+    undefined,
+    { timeout: 15000 },
+  )
+  .catch(() => {});
 check("materials", (await page.locator(".card-preview").count()) === 5);
 await page.screenshot({ path: path.join(OUT, "06-materials.png") });
 await page.keyboard.press("Escape");
