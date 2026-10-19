@@ -2,6 +2,8 @@ import type { AssetMeta, AssetSource, Beat, Project, Scene } from "../../types/p
 import { sceneTextHash } from "../sceneOps";
 import { blobUrlFor } from "../blobUrls";
 import { downloadBlob, sanitizeFileName } from "../download";
+import { THEMES } from "../../data/presets";
+import { normalizeSceneLayout } from "../storyboard";
 
 interface SerializedScene extends Omit<Scene, "audioBlob" | "audioUrl"> {
   audioBase64?: string;
@@ -185,6 +187,9 @@ export function parseProjectJson(text: string): Project {
       beats,
       duration: Number(scene.duration) > 0 ? Number(scene.duration) : 10,
       windows: Array.isArray(scene.windows) ? scene.windows : [],
+      ...(normalizeSceneLayout(scene.layout)
+        ? { layout: normalizeSceneLayout(scene.layout) }
+        : {}),
       audioBlob,
       audioUrl: audioBlob ? blobUrlFor(audioBlob) : undefined,
       audioTextHash:
@@ -201,8 +206,11 @@ export function parseProjectJson(text: string): Project {
     aspect: raw.aspect === "9:16" ? "9:16" : "16:9",
     assets,
     topic: typeof raw.topic === "string" ? raw.topic : "불러온 프로젝트",
-    themeId: raw.themeId ?? "paper",
-    visualStyle: raw.visualStyle ?? "diagram",
+    themeId: typeof raw.themeId === "string" && raw.themeId in THEMES ? raw.themeId : "paper",
+    visualStyle:
+      raw.visualStyle === "illustration" || raw.visualStyle === "marker"
+        ? raw.visualStyle
+        : "diagram",
     layoutStyle: raw.layoutStyle ?? "adaptive",
     voice: raw.voice ?? "Kore",
     model: raw.model ?? "gemini-3.8-flash",

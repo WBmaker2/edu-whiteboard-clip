@@ -110,6 +110,26 @@ await pickLayout(/인포그래픽 쇼케이스/);
 await pickScene(1);
 await capture("infographic_scene2");
 
+await pickLayout(/타임라인/);
+await pickScene(1);
+await capture("timeline_scene2");
+
+await pickLayout(/순환 다이어그램/);
+await pickScene(1);
+await capture("cycle_scene2");
+
+await pickLayout(/계층 구조도/);
+await pickScene(1);
+await capture("hierarchy_scene2");
+
+await pickLayout(/데이터 차트/);
+await pickScene(1);
+await capture("chart_scene2");
+
+await pickLayout(/벤다이어그램/);
+await pickScene(1);
+await capture("venn_scene2");
+
 await pickLayout(/스마트 적응형/);
 await pickScene(4);
 await capture("adaptive_scene5");

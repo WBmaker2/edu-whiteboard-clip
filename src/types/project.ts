@@ -9,7 +9,19 @@ export type LayoutStyle =
   | "flow"
   | "mindmap"
   | "comparison"
-  | "infographic";
+  | "infographic"
+  | "timeline"
+  | "cycle"
+  | "hierarchy"
+  | "chart"
+  | "venn";
+
+/** Concrete scene layout chosen by the storyboard (never "adaptive"). */
+export type SceneLayout = Exclude<LayoutStyle, "adaptive">;
+
+/** Settings-level selection: a concrete value or topic-based auto recommendation. */
+export type ThemeSelection = ThemeId | "auto";
+export type VisualSelection = VisualStyle | "auto";
 
 export type AspectRatio = "16:9" | "9:16";
 
@@ -54,6 +66,8 @@ export interface Scene {
   beats: Beat[];
   duration: number;
   windows: [number, number][];
+  /** Per-scene layout chosen from the storyboard. Missing means "use the adaptive heuristic". */
+  layout?: SceneLayout;
   audioBlob?: Blob;
   audioUrl?: string;
   audioSource?: "tts" | "recorded" | "none";

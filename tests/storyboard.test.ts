@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   buildScenesFromSeeds,
   estimateSceneDuration,
+  normalizeSceneLayout,
   normalizeStoryboard,
+  normalizeStoryboardResult,
   storyboardPrompt,
 } from "../src/lib/storyboard";
 
@@ -82,5 +84,68 @@ describe("storyboard normalization", () => {
     expect(prompt).toContain("광합성");
     expect(prompt).toContain("JSON");
     expect(prompt).not.toContain("```");
+  });
+
+  it("asks the model to choose a layout per scene", () => {
+    const prompt = storyboardPrompt("광합성");
+    expect(prompt).toContain('"layout"');
+    expect(prompt).toContain("cycle");
+    expect(prompt).toContain("timeline");
+  });
+
+  it("keeps a valid scene layout and drops unknown ones", () => {
+    const scenes = normalizeStoryboard([
+      { type: "intro", title: "도입", beats: [seedBeat(1)], layout: "timeline" },
+      { type: "body", title: "전개", beats: [seedBeat(1)], layout: "sparkles" },
+      { type: "outro", title: "정리", beats: [seedBeat(1)], layout: "cycle" },
+    ]);
+    expect(scenes[0].layout).toBe("timeline");
+    expect(scenes[1].layout).toBeUndefined();
+    expect(scenes[2].layout).toBe("cycle");
+  });
+
+  it("normalizes layout ids written with different casing or spacing", () => {
+    expect(normalizeSceneLayout("Mind-Map")).toBe("mindmap");
+    expect(normalizeSceneLayout("Venn")).toBe("venn");
+    expect(normalizeSceneLayout(" timeline ")).toBe("timeline");
+    expect(normalizeSceneLayout("nope")).toBeUndefined();
+  });
+
+  it("carries the scene layout into built scenes", () => {
+    const scenes = buildScenesFromSeeds(
+      normalizeStoryboard([
+        { type: "intro", title: "도입", beats: [seedBeat(1), seedBeat(2)], layout: "hierarchy" },
+        { type: "body", title: "전개", beats: [seedBeat(1), seedBeat(2)] },
+        { type: "outro", title: "정리", beats: [seedBeat(1), seedBeat(2)], layout: "chart" },
+      ]),
+    );
+    expect(scenes[0].layout).toBe("hierarchy");
+    expect(scenes[1].layout).toBeUndefined();
+    expect(scenes[2].layout).toBe("chart");
+  });
+
+  it("reads an optional style hint from a JSON object", () => {
+    const result = normalizeStoryboardResult({
+      style: { theme: "blueprint", visual: "diagram" },
+      scenes: [
+        { type: "intro", title: "도입", beats: [seedBeat(1)] },
+        { type: "body", title: "전개", beats: [seedBeat(1)] },
+        { type: "outro", title: "정리", beats: [seedBeat(1)] },
+      ],
+    });
+    expect(result.styleHint).toEqual({ themeId: "blueprint", visualStyle: "diagram" });
+  });
+
+  it("ignores an invalid style hint but still returns scenes", () => {
+    const result = normalizeStoryboardResult({
+      style: { theme: "neon", visual: "hologram" },
+      scenes: [
+        { type: "intro", title: "도입", beats: [seedBeat(1)] },
+        { type: "body", title: "전개", beats: [seedBeat(1)] },
+        { type: "outro", title: "정리", beats: [seedBeat(1)] },
+      ],
+    });
+    expect(result.styleHint).toBeUndefined();
+    expect(result.seeds).toHaveLength(3);
   });
 });

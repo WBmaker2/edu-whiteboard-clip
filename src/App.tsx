@@ -58,6 +58,7 @@ import {
 } from "./lib/storage";
 import { blobUrlFor } from "./lib/blobUrls";
 import { isAudioStale, sceneTextHash } from "./lib/sceneOps";
+import { resolveTheme, resolveVisual } from "./lib/recommend";
 import { ensureExportFonts } from "./lib/fonts";
 import { useI18n } from "./lib/i18n";
 import type { RecordedResult } from "./hooks/useRecorder";
@@ -206,19 +207,20 @@ export default function App() {
     const controller = new AbortController();
     generateAbortRef.current = controller;
     state.setPhase("generating");
-    state.setProgress(4, "5개 씬 스토리보드를 설계하는 중...");
+    state.setProgress(4, "주제에 맞는 장면 구성을 설계하는 중...");
     let fallbackNotified = false;
     try {
       const { generateStoryboard } = await import("./lib/gemini");
-      const { scenes: generated, modelUsed } = await generateStoryboard({
+      const curriculum = {
+        grade: state.gradeLevel,
+        subject: state.subject,
+        standards: state.standards,
+      };
+      const { scenes: generated, modelUsed, styleHint } = await generateStoryboard({
         apiKey: state.apiKey,
         topic: state.topic,
         model: state.model,
-        curriculum: {
-          grade: state.gradeLevel,
-          subject: state.subject,
-          standards: state.standards,
-        },
+        curriculum,
         signal: controller.signal,
         onFallback: (model) => {
           if (fallbackNotified) return;
@@ -226,6 +228,14 @@ export default function App() {
           state.pushToast("info", `선택한 모델 대신 ${model} 모델로 자동 전환했습니다.`);
         },
       });
+      const themeId =
+        state.themeId !== "auto"
+          ? state.themeId
+          : styleHint?.themeId ?? resolveTheme("auto", state.topic, curriculum);
+      const visualStyle =
+        state.visualStyle !== "auto"
+          ? state.visualStyle
+          : styleHint?.visualStyle ?? resolveVisual("auto", state.topic, curriculum);
       const scenes: Scene[] = generated.map((scene) => ({ ...scene }));
       let ttsFailed = false;
       let completed = 0;
@@ -278,8 +288,8 @@ export default function App() {
         aspect: "16:9",
         assets: {},
         topic: state.topic,
-        themeId: state.themeId,
-        visualStyle: state.visualStyle,
+        themeId,
+        visualStyle,
         layoutStyle: state.layoutStyle,
         voice: state.voice,
         model: modelUsed || state.model,
@@ -328,8 +338,8 @@ export default function App() {
     const demo = createDemoProject();
     const projectWithSettings: Project = {
       ...demo,
-      themeId: state.themeId,
-      visualStyle: state.visualStyle,
+      themeId: resolveTheme(state.themeId, demo.topic, undefined),
+      visualStyle: resolveVisual(state.visualStyle, demo.topic, undefined),
       layoutStyle: state.layoutStyle,
       bgmId: state.bgmId,
     };

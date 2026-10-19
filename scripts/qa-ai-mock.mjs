@@ -59,6 +59,20 @@ const story = [
   }
 ];
 
+// Scenes carry an AI-chosen layout; the response is the new object shape with a style hint.
+const bodyLayouts = ["timeline", "cycle", "chart"];
+let bodySeen = 0;
+const storyWithLayouts = story.map((scene) => {
+  if (scene.type !== "body") return scene;
+  const layout = bodyLayouts[bodySeen] ?? "flow";
+  bodySeen += 1;
+  return { ...scene, layout };
+});
+const storyboardResponse = {
+  style: { theme: "paper", visual: "illustration" },
+  scenes: storyWithLayouts,
+};
+
 const sampleRate = 24000;
 const seconds = 1.2;
 const samples = Math.floor(sampleRate * seconds);
@@ -110,7 +124,7 @@ await page.route("**/v1beta/models/*:generateContent*", async (route) => {
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        candidates: [{ content: { parts: [{ text: JSON.stringify(story) }] } }],
+        candidates: [{ content: { parts: [{ text: JSON.stringify(storyboardResponse) }] } }],
       }),
     });
   }
@@ -138,6 +152,16 @@ check("generated duration", (await page.locator(".soft-chip.is-blue").textConten
 await page.screenshot({ path: path.join(OUT, "01-generated.png"), fullPage: true });
 const badges = await page.locator(".audio-badge.tone-ai").count();
 check("tts audio applied", badges === 5, `${badges} scenes`);
+
+const canvasDataUrl = () =>
+  page.evaluate(() => document.querySelectorAll("canvas")[0].toDataURL("image/png"));
+await page.getByRole("tab", { name: /2\. 전개 1/ }).click();
+await page.waitForTimeout(400);
+const layoutScene2 = await canvasDataUrl();
+await page.getByRole("tab", { name: /3\. 전개 2/ }).click();
+await page.waitForTimeout(400);
+const layoutScene3 = await canvasDataUrl();
+check("ai per-scene layout variety", layoutScene2 !== layoutScene3);
 
 await page.getByRole("button", { name: "재생", exact: true }).click();
 await page.waitForTimeout(2600);

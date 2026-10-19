@@ -1,5 +1,10 @@
 import { createStore, get, set } from "idb-keyval";
-import type { AspectRatio, LayoutStyle, ThemeId, VisualStyle } from "../types/project";
+import type {
+  AspectRatio,
+  LayoutStyle,
+  ThemeSelection,
+  VisualSelection,
+} from "../types/project";
 import { DB_NAME, THEMES } from "../data/presets";
 import { uid } from "./time";
 
@@ -8,8 +13,8 @@ export interface UserTemplate {
   name: string;
   savedAt: string;
   topic: string;
-  themeId: ThemeId;
-  visualStyle: VisualStyle;
+  themeId: ThemeSelection;
+  visualStyle: VisualSelection;
   layoutStyle: LayoutStyle;
   aspect: AspectRatio;
   voice?: string;
@@ -20,14 +25,19 @@ const store = createStore(DB_NAME, "projects");
 const KEY = "templates:user";
 const TEMPLATE_LIMIT = 20;
 
-const THEME_IDS = Object.keys(THEMES);
-const VISUAL_IDS: VisualStyle[] = ["diagram", "illustration", "marker"];
+const THEME_IDS = [...Object.keys(THEMES), "auto"];
+const VISUAL_IDS = ["auto", "diagram", "illustration", "marker"];
 const LAYOUT_IDS: LayoutStyle[] = [
   "adaptive",
   "flow",
   "mindmap",
   "comparison",
   "infographic",
+  "timeline",
+  "cycle",
+  "hierarchy",
+  "chart",
+  "venn",
 ];
 
 export async function listUserTemplates(): Promise<UserTemplate[]> {
@@ -82,10 +92,12 @@ export function parseTemplateJson(
         ? raw.name.trim().slice(0, 40)
         : "가져온 템플릿",
     topic: raw.topic.slice(0, 300),
-    themeId: THEME_IDS.includes(raw.themeId) ? (raw.themeId as ThemeId) : "paper",
+    themeId: THEME_IDS.includes(raw.themeId)
+      ? (raw.themeId as ThemeSelection)
+      : "auto",
     visualStyle: VISUAL_IDS.includes(raw.visualStyle)
-      ? (raw.visualStyle as VisualStyle)
-      : "diagram",
+      ? (raw.visualStyle as VisualSelection)
+      : "auto",
     layoutStyle: LAYOUT_IDS.includes(raw.layoutStyle)
       ? (raw.layoutStyle as LayoutStyle)
       : "adaptive",

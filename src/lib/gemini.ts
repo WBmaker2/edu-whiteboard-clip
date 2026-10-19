@@ -5,9 +5,9 @@ import {
 } from "../data/presets";
 import {
   buildScenesFromSeeds,
-  normalizeStoryboard,
+  normalizeStoryboardResult,
   storyboardPrompt,
-  type SceneSeed,
+  type StoryboardStyleHint,
 } from "./storyboard";
 import type { CurriculumContext } from "../data/curriculum";
 import {
@@ -217,7 +217,7 @@ export async function generateStoryboard(options: {
   curriculum?: CurriculumContext;
   onFallback?: (model: string) => void;
   signal?: AbortSignal;
-}): Promise<{ scenes: Scene[]; modelUsed: string }> {
+}): Promise<{ scenes: Scene[]; modelUsed: string; styleHint?: StoryboardStyleHint }> {
   const { data, modelUsed } = await callGemini({
     apiKey: options.apiKey,
     model: options.model,
@@ -240,8 +240,12 @@ export async function generateStoryboard(options: {
   } catch {
     throw new Error("스토리보드 JSON을 해석하지 못했습니다. 다시 생성해 주세요.");
   }
-  const seeds: SceneSeed[] = normalizeStoryboard(parsed);
-  return { scenes: buildScenesFromSeeds(seeds), modelUsed };
+  const { seeds, styleHint } = normalizeStoryboardResult(parsed);
+  return {
+    scenes: buildScenesFromSeeds(seeds),
+    modelUsed,
+    ...(styleHint ? { styleHint } : {}),
+  };
 }
 
 export interface TtsResult {

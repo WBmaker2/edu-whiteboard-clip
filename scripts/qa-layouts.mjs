@@ -44,6 +44,11 @@ const layouts = [
   ["방사형 마인드맵", "mindmap-5.png"],
   ["비교 & 대조 듀얼", "comparison-5.png"],
   ["인포그래픽 쇼케이스", "infographic-5.png"],
+  ["타임라인", "timeline-5.png"],
+  ["순환 다이어그램", "cycle-5.png"],
+  ["계층 구조도", "hierarchy-5.png"],
+  ["데이터 차트", "chart-5.png"],
+  ["벤다이어그램", "venn-5.png"],
 ];
 
 for (const [label, file] of layouts) {

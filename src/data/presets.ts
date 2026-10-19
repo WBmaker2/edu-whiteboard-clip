@@ -1,6 +1,7 @@
 import type {
   LayoutStyle,
   PresetOption,
+  SceneLayout,
   ThemePalette,
   VisualStyle,
 } from "../types/project";
@@ -92,7 +93,13 @@ export const THEMES: Record<string, ThemePalette> = {
   },
 };
 
-export const VISUAL_STYLES: PresetOption<VisualStyle>[] = [
+export const VISUAL_STYLES: PresetOption<VisualStyle | "auto">[] = [
+  {
+    id: "auto",
+    name: "주제 자동 추천",
+    desc: "주제·교과에 맞춰 자동 선택",
+    badge: "추천",
+  },
   {
     id: "diagram",
     name: "정밀 다이어그램",
@@ -114,7 +121,7 @@ export const LAYOUT_STYLES: PresetOption<LayoutStyle>[] = [
   {
     id: "adaptive",
     name: "스마트 적응형",
-    desc: "씬 흐름에 맞춰 레이아웃 자동 전환",
+    desc: "주제와 내용에 맞춰 레이아웃 자동 전환",
     badge: "추천",
   },
   {
@@ -137,6 +144,44 @@ export const LAYOUT_STYLES: PresetOption<LayoutStyle>[] = [
     name: "인포그래픽 쇼케이스",
     desc: "대형 비주얼과 3단 브레이크다운",
   },
+  {
+    id: "timeline",
+    name: "타임라인",
+    desc: "시간 순서·연표 흐름",
+  },
+  {
+    id: "cycle",
+    name: "순환 다이어그램",
+    desc: "반복·순환 과정의 원형 루프",
+  },
+  {
+    id: "hierarchy",
+    name: "계층 구조도",
+    desc: "분류·단계의 트리 구조",
+  },
+  {
+    id: "chart",
+    name: "데이터 차트",
+    desc: "수치·비율 막대 그래프",
+  },
+  {
+    id: "venn",
+    name: "벤다이어그램",
+    desc: "두 개념의 겹침과 차이",
+  },
+];
+
+/** Layout ids the storyboard AI may assign to a single scene. */
+export const SCENE_LAYOUT_KEYS: SceneLayout[] = [
+  "flow",
+  "mindmap",
+  "comparison",
+  "infographic",
+  "timeline",
+  "cycle",
+  "hierarchy",
+  "chart",
+  "venn",
 ];
 
 export const MODELS: PresetOption[] = [

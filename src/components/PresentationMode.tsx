@@ -66,6 +66,8 @@ export function PresentationMode({ project, open, startScene, onClose }: Present
 
   const scene = project?.scenes[sceneIndex];
   const assetImages = useAssetImages(project);
+  const themeId = project?.themeId ?? "paper";
+  const visualStyle = project?.visualStyle ?? "diagram";
 
   const drawStage = useCallback(() => {
     const canvas = stageRef.current;
@@ -84,8 +86,8 @@ export function PresentationMode({ project, open, startScene, onClose }: Present
         ? current.subtitle
         : translated?.[captionBeat] ?? current.beats[captionBeat]?.narration;
     renderScene(ctx, current, current.duration, {
-      themeId: store.themeId,
-      visualStyle: store.visualStyle,
+      themeId,
+      visualStyle,
       layoutStyle: store.layoutStyle,
       captions: store.captions,
       captionText: store.captions ? captionText : undefined,
@@ -99,8 +101,8 @@ export function PresentationMode({ project, open, startScene, onClose }: Present
     project,
     sceneIndex,
     reveal,
-    store.themeId,
-    store.visualStyle,
+    themeId,
+    visualStyle,
     store.layoutStyle,
     store.captions,
     store.captionLang,

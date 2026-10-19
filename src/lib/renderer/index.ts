@@ -1,4 +1,4 @@
-import type { AspectRatio, LayoutStyle, Scene, ThemeId, VisualStyle } from "../../types/project";
+import type { AspectRatio, LayoutStyle, Scene, SceneLayout, ThemeId, VisualStyle } from "../../types/project";
 import { activeBeatIndex, clamp, easeOutCubic } from "../time";
 import {
   beginSketchFrame,
@@ -19,6 +19,11 @@ import { drawInfographic } from "./layouts/infographic";
 import { drawIntro } from "./layouts/intro";
 import { drawMindmap } from "./layouts/mindmap";
 import { drawOutro } from "./layouts/outro";
+import { drawTimeline } from "./layouts/timeline";
+import { drawCycle } from "./layouts/cycle";
+import { drawHierarchy } from "./layouts/hierarchy";
+import { drawChart } from "./layouts/chart";
+import { drawVenn } from "./layouts/venn";
 import { cardLayout, nodeLayout } from "./layouts/shared";
 import { drawVerticalCaption, drawVerticalScene, renderVerticalPoster } from "./vertical";
 import { renderPoster as renderHorizontalPoster } from "./poster";
@@ -67,15 +72,22 @@ function beatProgress(
   return easeOutCubic(raw);
 }
 
+/** Keeps a scene layout sensible for the number of beats it actually has. */
+function guardLayout(layout: SceneLayout, beatCount: number): SceneLayout {
+  if (layout === "comparison" && beatCount > 4) return "flow";
+  if (layout === "venn" && beatCount > 3) return "comparison";
+  if (layout === "timeline" && beatCount > 5) return "flow";
+  return layout;
+}
+
 function resolveLayout(
   layoutStyle: LayoutStyle,
   sceneIndex: number,
   scene: Scene,
-): Exclude<LayoutStyle, "adaptive"> {
-  if (layoutStyle !== "adaptive") {
-    if (layoutStyle === "comparison" && scene.beats.length > 4) return "flow";
-    return layoutStyle;
-  }
+): SceneLayout {
+  // A manually chosen layout wins; "adaptive" lets each scene decide (AI layout, else heuristic).
+  if (layoutStyle !== "adaptive") return guardLayout(layoutStyle, scene.beats.length);
+  if (scene.layout) return guardLayout(scene.layout, scene.beats.length);
   const title = scene.title;
   const comparison = scene.beats.length > 4 ? "flow" : "comparison";
   if (sceneIndex <= 1) return "flow";
@@ -106,7 +118,7 @@ function pickVisual(
 
 function visualSlotFor(
   scene: Scene,
-  layout: Exclude<LayoutStyle, "adaptive">,
+  layout: SceneLayout,
   beatIndex: number,
 ): VisualSlot {
   if (scene.type === "intro" || scene.type === "outro") {
@@ -130,6 +142,21 @@ function visualSlotFor(
     return scene.beats.length >= 4
       ? { x: 960, y: 356, width: 150, height: 96 }
       : { x: 205, y: 838, width: 150, height: 88, rotate: -0.04 };
+  }
+  if (layout === "timeline") {
+    return { x: 960, y: 300, width: 150, height: 92 };
+  }
+  if (layout === "cycle") {
+    return { x: 960, y: 235, width: 150, height: 90 };
+  }
+  if (layout === "hierarchy") {
+    return { x: 960, y: 500, width: 150, height: 92 };
+  }
+  if (layout === "chart") {
+    return { x: 1490, y: 460, width: 170, height: 108 };
+  }
+  if (layout === "venn") {
+    return { x: 960, y: 358, width: 140, height: 88, rotate: -0.04 };
   }
   return { x: 955, y: 490, width: 150, height: 96 };
 }
@@ -195,6 +222,11 @@ export function renderScene(
     if (layout === "mindmap") drawMindmap(ctx, scene, theme, style, bp);
     else if (layout === "comparison") drawComparison(ctx, scene, theme, style, bp);
     else if (layout === "infographic") drawInfographic(ctx, scene, theme, style, bp);
+    else if (layout === "timeline") drawTimeline(ctx, scene, theme, style, bp);
+    else if (layout === "cycle") drawCycle(ctx, scene, theme, style, bp);
+    else if (layout === "hierarchy") drawHierarchy(ctx, scene, theme, style, bp);
+    else if (layout === "chart") drawChart(ctx, scene, theme, style, bp);
+    else if (layout === "venn") drawVenn(ctx, scene, theme, style, bp);
     else drawFlow(ctx, scene, theme, style, bp);
   }
 

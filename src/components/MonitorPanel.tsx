@@ -108,9 +108,12 @@ export function MonitorPanel({
   const sceneTabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const assetImages = useAssetImages(project);
   const profile = canvasProfile(store.aspect);
+  const themeId = project?.themeId ?? (store.themeId === "auto" ? "paper" : store.themeId);
+  const visualStyle =
+    project?.visualStyle ?? (store.visualStyle === "auto" ? "diagram" : store.visualStyle);
   const options = {
-    themeId: store.themeId,
-    visualStyle: store.visualStyle,
+    themeId,
+    visualStyle,
     layoutStyle: store.layoutStyle,
     aspect: store.aspect,
     captions: store.captions,
@@ -131,7 +134,7 @@ export function MonitorPanel({
     },
   };
   const playback = usePlayback(project, options, canvasRef);
-  const theme = THEMES[store.themeId] ?? THEMES.paper;
+  const theme = THEMES[themeId] ?? THEMES.paper;
   const isGenerating = store.phase === "generating";
   const canUndo = store.canUndo;
   const canRedo = store.canRedo;
@@ -142,8 +145,8 @@ export function MonitorPanel({
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    renderPoster(ctx, store.themeId, store.aspect);
-  }, [project, store.themeId, store.aspect]);
+    renderPoster(ctx, themeId, store.aspect);
+  }, [project, themeId, store.aspect]);
 
   useEffect(() => {
     if (useStudioStore.getState().activeSceneIndex !== playback.activeScene) {

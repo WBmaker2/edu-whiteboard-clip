@@ -362,7 +362,9 @@ export function SettingsPanel({ onGenerate, onDemo, onCancelGenerate }: Settings
                         ? t("settings.aspectPortraitShort")
                         : t("settings.aspectLandscapeShort")}{" "}
                       ·{" "}
-                      {THEMES[template.themeId]?.name ?? template.themeId}
+                      {template.themeId === "auto"
+                        ? "주제 자동 추천"
+                        : THEMES[template.themeId]?.name ?? template.themeId}
                     </small>
                   </button>
                   <button
@@ -506,6 +508,28 @@ export function SettingsPanel({ onGenerate, onDemo, onCancelGenerate }: Settings
           <span className="panel-hint">Color Theme</span>
         </div>
         <div className="option-grid two">
+          <button
+            type="button"
+            className={`theme-card ${store.themeId === "auto" ? "is-selected" : ""}`}
+            onClick={() => store.setTheme("auto")}
+          >
+            <span
+              className="theme-swatch"
+              style={{
+                background:
+                  "linear-gradient(135deg, #faf9f6 0%, #0b1220 33%, #fbf7f0 66%, #0a0a0c 100%)",
+                borderColor: "#c7c3ba",
+                color: "#2f5bea",
+              }}
+            >
+              <span style={{ background: "#2f5bea" }} />
+            </span>
+            <span className="theme-meta">
+              <span className="option-title">주제 자동 추천</span>
+              <span className="option-desc">주제·교과에 맞춰 자동 선택 (추천)</span>
+            </span>
+            <span className="radio-dot" aria-hidden="true" />
+          </button>
           {Object.values(THEMES).map((theme) => (
             <button
               key={theme.id}

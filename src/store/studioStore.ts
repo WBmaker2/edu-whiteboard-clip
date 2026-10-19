@@ -7,13 +7,14 @@ import type {
   Project,
   Scene,
   SceneType,
-  ThemeId,
-  VisualStyle,
+  ThemeSelection,
+  VisualSelection,
 } from "../types/project";
 import { SETTINGS_KEY } from "../data/presets";
 import { uid } from "../lib/time";
 import type { Language } from "../lib/i18n";
 import { blobUrlFor } from "../lib/blobUrls";
+import { resolveTheme, resolveVisual } from "../lib/recommend";
 import {
   emptyHistory,
   pushHistory,
@@ -49,8 +50,8 @@ export interface StudioState {
   apiKey: string;
   rememberKey: boolean;
   topic: string;
-  themeId: ThemeId;
-  visualStyle: VisualStyle;
+  themeId: ThemeSelection;
+  visualStyle: VisualSelection;
   layoutStyle: LayoutStyle;
   aspect: AspectRatio;
   gradeLevel: string;
@@ -89,8 +90,8 @@ export interface StudioState {
   setApiKey: (value: string) => void;
   setRememberKey: (value: boolean) => void;
   patch: (partial: Partial<StudioState>) => void;
-  setTheme: (themeId: ThemeId) => void;
-  setVisualStyle: (visualStyle: VisualStyle) => void;
+  setTheme: (themeId: ThemeSelection) => void;
+  setVisualStyle: (visualStyle: VisualSelection) => void;
   setLayoutStyle: (layoutStyle: LayoutStyle) => void;
   setAspect: (aspect: AspectRatio) => void;
   setBgmId: (bgmId: string) => void;
@@ -143,7 +144,7 @@ export const useStudioStore = create<StudioState>()(
   persist(
     (set, get) => {
       const syncProjectField = <
-        K extends "themeId" | "visualStyle" | "layoutStyle" | "aspect" | "bgmId",
+        K extends "layoutStyle" | "aspect" | "bgmId",
       >(
         key: K,
         value: Project[K],
@@ -155,13 +156,33 @@ export const useStudioStore = create<StudioState>()(
           project[key] === value ? project : { ...project, [key]: value },
         );
       };
+      const curriculumOf = () => {
+        const { gradeLevel, subject, standards } = get();
+        return { grade: gradeLevel, subject, standards };
+      };
+      const setTheme: StudioState["setTheme"] = (selection) => {
+        set({ themeId: selection });
+        const current = get().project;
+        if (!current) return;
+        const concrete = resolveTheme(selection, current.topic, curriculumOf());
+        if (current.themeId === concrete) return;
+        get().applyEdit((project) => ({ ...project, themeId: concrete }));
+      };
+      const setVisualStyle: StudioState["setVisualStyle"] = (selection) => {
+        set({ visualStyle: selection });
+        const current = get().project;
+        if (!current) return;
+        const concrete = resolveVisual(selection, current.topic, curriculumOf());
+        if (current.visualStyle === concrete) return;
+        get().applyEdit((project) => ({ ...project, visualStyle: concrete }));
+      };
       return {
         language: "ko",
         apiKey: "",
       rememberKey: false,
       topic: defaultTopic,
-      themeId: "paper",
-      visualStyle: "diagram",
+      themeId: "auto",
+      visualStyle: "auto",
       layoutStyle: "adaptive",
       aspect: "16:9",
       gradeLevel: "",
@@ -200,8 +221,8 @@ export const useStudioStore = create<StudioState>()(
       setApiKey: (value) => set({ apiKey: value }),
       setRememberKey: (value) => set({ rememberKey: value }),
       patch: (partial) => set(partial),
-      setTheme: (themeId) => syncProjectField("themeId", themeId),
-      setVisualStyle: (visualStyle) => syncProjectField("visualStyle", visualStyle),
+      setTheme: (themeId) => setTheme(themeId),
+      setVisualStyle: (visualStyle) => setVisualStyle(visualStyle),
       setLayoutStyle: (layoutStyle) => syncProjectField("layoutStyle", layoutStyle),
       setAspect: (aspect) => syncProjectField("aspect", aspect),
       setBgmId: (bgmId) => syncProjectField("bgmId", bgmId),
