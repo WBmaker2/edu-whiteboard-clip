@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>폴리곤 동물원 — three.js</title>
+    <style>
+      :root {
+        --ink: #3a2f24;
+        --ink-soft: #6d5c4b;
+        --paper: rgba(255, 252, 245, 0.86);
+        --paper-solid: #fffcf5;
+        --line: rgba(58, 47, 36, 0.14);
+        --accent: #d99a2b;
+        --accent-deep: #b8791a;
+        --radius: 16px;
+        --shadow: 0 10px 30px rgba(90, 68, 40, 0.16);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #efe6d5;
+        color: var(--ink);
+        font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      #scene {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        display: block;
+        touch-action: none;
+      }
+
+      .hud {
+        position: fixed;
+        z-index: 2;
+        background: var(--paper);
+        backdrop-filter: blur(10px);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+      }
+
+      .hud-title {
+        top: 20px;
+        left: 20px;
+        padding: 14px 20px;
+        max-width: 340px;
+      }
+
+      .hud-title h1 {
+        margin: 0 0 4px;
+        font-size: 19px;
+        letter-spacing: -0.01em;
+      }
+
+      .hud-title p {
+        margin: 0;
+        font-size: 13px;
+        line-height: 1.5;
+        color: var(--ink-soft);
+      }
+
+      .hud-bar {
+        left: 50%;
+        bottom: 22px;
+        transform: translateX(-50%);
+        padding: 12px 14px;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        max-width: min(920px, calc(100vw - 40px));
+      }
+
+      .group {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding-right: 10px;
+        border-right: 1px solid var(--line);
+      }
+
+      .group:last-child {
+        padding-right: 0;
+        border-right: 0;
+      }
+
+      .group-label {
+        font-size: 12px;
+        color: var(--ink-soft);
+        margin-right: 2px;
+      }
+
+      button {
+        font: inherit;
+        font-size: 14px;
+        color: var(--ink);
+        background: var(--paper-solid);
+        border: 1px solid var(--line);
+        border-radius: 11px;
+        padding: 9px 14px;
+        cursor: pointer;
+        transition: transform 0.12s ease, background 0.15s ease, border-color 0.15s ease;
+      }
+
+      button:hover {
+        transform: translateY(-1px);
+        border-color: rgba(58, 47, 36, 0.3);
+      }
+
+      button:focus-visible {
+        outline: 2px solid var(--accent-deep);
+        outline-offset: 2px;
+      }
+
+      button[aria-pressed="true"] {
+        background: var(--accent);
+        border-color: var(--accent-deep);
+        color: #fffdf8;
+      }
+
+      .btn-primary {
+        background: var(--accent);
+        border-color: var(--accent-deep);
+        color: #fffdf8;
+        font-weight: 600;
+      }
+
+      .btn-pulse {
+        animation: btn-pulse 1.9s ease-in-out infinite;
+      }
+
+      @keyframes btn-pulse {
+        0%,
+        100% {
+          box-shadow: 0 0 0 0 rgba(217, 154, 43, 0.5);
+        }
+        50% {
+          box-shadow: 0 0 0 9px rgba(217, 154, 43, 0);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .btn-pulse {
+          animation: none;
+        }
+      }
+
+      .hud-status {
+        right: 20px;
+        top: 20px;
+        padding: 12px 16px;
+        font-size: 13px;
+        min-width: 170px;
+      }
+
+      .hud-status dl {
+        margin: 0;
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 4px 12px;
+      }
+
+      .hud-status dt {
+        color: var(--ink-soft);
+      }
+
+      .hud-status dd {
+        margin: 0;
+        text-align: right;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .hint {
+        position: fixed;
+        right: 20px;
+        bottom: 22px;
+        z-index: 2;
+        font-size: 12px;
+        color: var(--ink-soft);
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 8px 12px;
+      }
+
+      .back-link {
+        position: fixed;
+        top: 14px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 3;
+        font: 500 11px/1 "IBM Plex Mono", "Nanum Gothic Coding", ui-monospace, monospace;
+        letter-spacing: 0.12em;
+        text-decoration: none;
+        color: var(--ink-soft);
+        background: var(--paper-solid);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 8px 13px;
+      }
+
+      .back-link:hover {
+        color: var(--ink);
+        border-color: rgba(58, 47, 36, 0.32);
+      }
+    </style>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.186.1/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.186.1/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <a class="back-link" href="../index.html">&#8592; GAMES</a>
+    <canvas id="scene"></canvas>
+
+    <section class="hud hud-title">
+      <h1>폴리곤 동물원</h1>
+      <p>기본 도형만으로 짐승을 절차적으로 조립했습니다. 동물을 클릭하면 뛰어오르고, 바닥을 끌어 orbit 시점을 돌릴 수 있습니다.</p>
+    </section>
+
+    <section class="hud hud-status">
+      <dl>
+        <dt>선택한 종</dt>
+        <dd id="stat-species">고양이</dd>
+        <dt>개체 수</dt>
+        <dd id="stat-count">1</dd>
+        <dt>움직임</dt>
+        <dd id="stat-motion">가만히</dd>
+      </dl>
+    </section>
+
+    <nav class="hud hud-bar">
+      <div class="group" id="species-group" role="group" aria-label="종 선택">
+        <span class="group-label">종</span>
+      </div>
+      <div class="group">
+        <button id="btn-add" class="btn-primary btn-pulse" type="button">동물 추가</button>
+        <button id="btn-walk" type="button" aria-pressed="false">모두 걷기</button>
+        <button id="btn-reset" type="button">무대 비우기</button>
+      </div>
+    </nav>
+
+    <p class="hint">드래그: 시점 회전 · 휠: 확대 · 동물 클릭: 점프</p>
+
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>

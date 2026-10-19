@@ -1,0 +1,30 @@
+{
+  "generatedAt": "2026-10-19T13:48:11.539Z",
+  "games": {
+    "zoo": {
+      "tests": 12,
+      "consoleErrors": 0,
+      "invariantViolations": 0,
+      "viewDiffPercent": 44
+    },
+    "molecule": {
+      "tests": 16,
+      "consoleErrors": 0,
+      "invariantViolations": 0,
+      "viewDiffPercent": 21
+    },
+    "defense": {
+      "tests": 17,
+      "consoleErrors": 0,
+      "invariantViolations": 0,
+      "viewDiffPercent": 20
+    }
+  },
+  "totals": {
+    "games": 3,
+    "tests": 45,
+    "views": 9,
+    "consoleErrors": 0,
+    "invariantViolations": 0
+  }
+}

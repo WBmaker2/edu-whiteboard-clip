@@ -1,0 +1,946 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>M3.1 FLASH / 3D BENCH — MiniMax M3.1 Flash가 만든 3D 게임 3종</title>
+    <meta
+      name="description"
+      content="MiniMax M3.1 Flash가 직접 구현한 three.js 3D 게임 3종. 폴리곤 동물원, 3D 분자 빌더, 3D 타워 디펜스를 바로 플레이할 수 있습니다."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Nanum+Gothic+Coding:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --surface: #0b0c0a;
+        --surface-2: #111310;
+        --surface-3: #171a15;
+        --rule: rgba(255, 255, 255, 0.13);
+        --rule-strong: rgba(255, 255, 255, 0.26);
+        --signal: #ffb800;
+        --ink: #e9e9e2;
+        --ink-dim: #8d9187;
+        --font-mono: "IBM Plex Mono", "Nanum Gothic Coding", ui-monospace, monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        background: var(--surface);
+        color: var(--ink);
+        font-family: var(--font-mono);
+        font-size: 15px;
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+        font-variant-numeric: tabular-nums;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      .wrap {
+        width: min(1240px, calc(100vw - 64px));
+        margin: 0 auto;
+      }
+
+      /* ---------- 상단 바 ---------- */
+      .topbar {
+        border-bottom: 1px solid var(--rule);
+        position: sticky;
+        top: 0;
+        background: var(--surface);
+        z-index: 20;
+      }
+
+      .topbar-inner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 58px;
+      }
+
+      .mark {
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-decoration: none;
+        color: var(--ink);
+      }
+
+      .mark span {
+        color: var(--signal);
+      }
+
+      .nav {
+        display: flex;
+        gap: 22px;
+      }
+
+      .nav a {
+        font-size: 12px;
+        letter-spacing: 0.12em;
+        text-decoration: none;
+        color: var(--ink-dim);
+        padding-bottom: 2px;
+        border-bottom: 1px solid transparent;
+      }
+
+      .nav a:hover {
+        color: var(--ink);
+        border-bottom-color: var(--signal);
+      }
+
+      /* ---------- 히어로 ---------- */
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 320px;
+        gap: 0;
+        padding: 76px 0 64px;
+        align-items: start;
+      }
+
+      .hero-main {
+        padding-right: 56px;
+      }
+
+      .eyebrow {
+        margin: 0 0 22px;
+        font-size: 11px;
+        letter-spacing: 0.18em;
+        color: var(--ink-dim);
+      }
+
+      .eyebrow b {
+        color: var(--signal);
+        font-weight: 500;
+      }
+
+      h1 {
+        margin: 0 0 26px;
+        font-size: clamp(34px, 5.2vw, 64px);
+        line-height: 1.16;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+      }
+
+      .lede {
+        margin: 0 0 34px;
+        max-width: 54ch;
+        font-size: 15px;
+        line-height: 1.85;
+        color: var(--ink-dim);
+      }
+
+      .lede b {
+        color: var(--ink);
+        font-weight: 500;
+      }
+
+      .cta {
+        display: inline-block;
+        font-size: 13px;
+        letter-spacing: 0.1em;
+        text-decoration: none;
+        color: var(--surface);
+        background: var(--signal);
+        border: 1px solid var(--signal);
+        padding: 12px 22px;
+      }
+
+      .cta:hover {
+        background: transparent;
+        color: var(--signal);
+      }
+
+      .btn-pulse {
+        animation: btn-pulse 2s ease-in-out infinite;
+      }
+
+      @keyframes btn-pulse {
+        0%,
+        100% {
+          box-shadow: 0 0 0 0 rgba(255, 184, 0, 0.5);
+        }
+        50% {
+          box-shadow: 0 0 0 10px rgba(255, 184, 0, 0);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .btn-pulse {
+          animation: none;
+        }
+        html {
+          scroll-behavior: auto;
+        }
+      }
+
+      .hero-stats {
+        margin: 0;
+        border: 1px solid var(--rule);
+      }
+
+      .hero-stats div {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 13px 16px;
+        border-bottom: 1px solid var(--rule);
+      }
+
+      .hero-stats div:last-child {
+        border-bottom: 0;
+      }
+
+      .hero-stats dt {
+        font-size: 12px;
+        color: var(--ink-dim);
+      }
+
+      .hero-stats dd {
+        margin: 0;
+        font-size: 15px;
+        font-weight: 600;
+      }
+
+      /* ---------- 섹션 공통 ---------- */
+      .section {
+        padding: 60px 0;
+        border-top: 1px solid var(--rule);
+      }
+
+      .section-head {
+        display: flex;
+        align-items: baseline;
+        gap: 16px;
+        margin-bottom: 34px;
+      }
+
+      .section-head .index {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--signal);
+        letter-spacing: 0.1em;
+      }
+
+      .section-head h2 {
+        margin: 0;
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: 0.16em;
+      }
+
+      .section-head p {
+        margin: 0;
+        font-size: 13px;
+        color: var(--ink-dim);
+      }
+
+      /* ---------- 카드 ---------- */
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        border: 1px solid var(--rule);
+      }
+
+      .card {
+        display: flex;
+        flex-direction: column;
+        border-right: 1px solid var(--rule);
+      }
+
+      .card:last-child {
+        border-right: 0;
+      }
+
+      .card-media {
+        position: relative;
+        aspect-ratio: 16 / 10;
+        overflow: hidden;
+        background: var(--surface-2);
+        border-bottom: 1px solid var(--rule);
+      }
+
+      .card-frame {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        opacity: 0;
+        transition: opacity 0.4s ease;
+      }
+
+      .card-frame.is-active {
+        opacity: 1;
+      }
+
+      .card-body {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        padding: 22px 20px 20px;
+      }
+
+      .card-index {
+        display: flex;
+        gap: 12px;
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        color: var(--ink-dim);
+        margin-bottom: 10px;
+      }
+
+      .card-index b {
+        color: var(--signal);
+        font-weight: 600;
+      }
+
+      .card h3 {
+        margin: 0 0 10px;
+        font-size: 19px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+
+      .card-desc {
+        margin: 0 0 20px;
+        font-size: 13.5px;
+        line-height: 1.8;
+        color: var(--ink-dim);
+      }
+
+      .card-checks {
+        margin: auto 0 18px;
+        border-top: 1px solid var(--rule);
+      }
+
+      .card-checks div {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 7px 0;
+        border-bottom: 1px solid var(--rule);
+        font-size: 12px;
+      }
+
+      .card-checks dt {
+        color: var(--ink-dim);
+      }
+
+      .card-checks dd {
+        margin: 0;
+        font-weight: 500;
+      }
+
+      .play {
+        font: inherit;
+        font-size: 12px;
+        letter-spacing: 0.16em;
+        color: var(--surface);
+        background: var(--signal);
+        border: 1px solid var(--signal);
+        padding: 11px 18px;
+        cursor: pointer;
+        text-align: left;
+      }
+
+      .play:hover {
+        background: transparent;
+        color: var(--signal);
+      }
+
+      .play:focus-visible,
+      .cta:focus-visible,
+      .nav a:focus-visible,
+      .copy:focus-visible,
+      .player-bar a:focus-visible,
+      .player-bar button:focus-visible {
+        outline: 2px solid var(--signal);
+        outline-offset: 2px;
+      }
+
+      /* ---------- 검증 3층 ---------- */
+      .layers {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        border: 1px solid var(--rule);
+      }
+
+      .layer {
+        padding: 24px 22px 26px;
+        border-right: 1px solid var(--rule);
+      }
+
+      .layer:last-child {
+        border-right: 0;
+      }
+
+      .layer .index {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--signal);
+        letter-spacing: 0.1em;
+      }
+
+      .layer h3 {
+        margin: 12px 0 10px;
+        font-size: 17px;
+        font-weight: 600;
+      }
+
+      .layer p {
+        margin: 0;
+        font-size: 13.5px;
+        line-height: 1.8;
+        color: var(--ink-dim);
+      }
+
+      /* ---------- 실행 ---------- */
+      .run-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 320px;
+        gap: 40px;
+        align-items: start;
+      }
+
+      .code {
+        border: 1px solid var(--rule);
+        background: var(--surface-2);
+        margin: 0;
+        padding: 0;
+        overflow-x: auto;
+      }
+
+      .code div {
+        display: flex;
+        gap: 14px;
+        padding: 11px 16px;
+        border-bottom: 1px solid var(--rule);
+        font-size: 13px;
+        white-space: pre;
+      }
+
+      .code div:last-child {
+        border-bottom: 0;
+      }
+
+      .code .prompt {
+        color: var(--signal);
+        user-select: none;
+      }
+
+      .code .cmd {
+        color: var(--ink);
+      }
+
+      .code .note {
+        color: var(--ink-dim);
+      }
+
+      .run-side {
+        border: 1px solid var(--rule);
+        padding: 20px;
+      }
+
+      .run-side h3 {
+        margin: 0 0 12px;
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.14em;
+      }
+
+      .run-side p {
+        margin: 0 0 16px;
+        font-size: 13px;
+        line-height: 1.8;
+        color: var(--ink-dim);
+      }
+
+      .copy {
+        font: inherit;
+        font-size: 12px;
+        letter-spacing: 0.1em;
+        color: var(--ink);
+        background: transparent;
+        border: 1px solid var(--rule-strong);
+        padding: 9px 16px;
+        cursor: pointer;
+      }
+
+      .copy:hover {
+        border-color: var(--signal);
+        color: var(--signal);
+      }
+
+      /* ---------- 풋터 ---------- */
+      footer {
+        border-top: 1px solid var(--rule);
+        padding: 26px 0 40px;
+        font-size: 12px;
+        color: var(--ink-dim);
+      }
+
+      .foot-inner {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 28px;
+        justify-content: space-between;
+      }
+
+      /* ---------- 플레이 모달 ---------- */
+      dialog#player {
+        width: min(1240px, 94vw);
+        height: min(860px, 90vh);
+        max-width: none;
+        max-height: none;
+        padding: 0;
+        border: 1px solid var(--rule-strong);
+        background: var(--surface-2);
+        color: var(--ink);
+      }
+
+      dialog#player::backdrop {
+        background: rgba(0, 0, 0, 0.86);
+      }
+
+      .player-bar {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        height: 46px;
+        padding: 0 14px 0 18px;
+        border-bottom: 1px solid var(--rule);
+        font-size: 12px;
+      }
+
+      .player-bar .name {
+        font-weight: 600;
+        letter-spacing: 0.04em;
+      }
+
+      .player-bar .spacer {
+        flex: 1;
+      }
+
+      .player-bar a {
+        color: var(--ink-dim);
+        text-decoration: none;
+        border-bottom: 1px solid var(--rule-strong);
+        padding-bottom: 1px;
+      }
+
+      .player-bar a:hover {
+        color: var(--signal);
+        border-bottom-color: var(--signal);
+      }
+
+      .player-bar button {
+        font: inherit;
+        font-size: 12px;
+        letter-spacing: 0.1em;
+        color: var(--ink);
+        background: transparent;
+        border: 1px solid var(--rule-strong);
+        padding: 6px 14px;
+        cursor: pointer;
+      }
+
+      .player-bar button:hover {
+        border-color: var(--signal);
+        color: var(--signal);
+      }
+
+      #player-frame {
+        display: block;
+        width: 100%;
+        height: calc(100% - 46px);
+        border: 0;
+        background: #000;
+      }
+
+      /* ---------- 반응형 ---------- */
+      @media (max-width: 980px) {
+        .wrap {
+          width: calc(100vw - 36px);
+        }
+        .hero {
+          grid-template-columns: 1fr;
+          gap: 34px;
+          padding: 48px 0 44px;
+        }
+        .hero-main {
+          padding-right: 0;
+        }
+        .cards,
+        .layers {
+          grid-template-columns: 1fr;
+        }
+        .card,
+        .layer {
+          border-right: 0;
+          border-bottom: 1px solid var(--rule);
+        }
+        .card:last-child,
+        .layer:last-child {
+          border-bottom: 0;
+        }
+        .run-grid {
+          grid-template-columns: 1fr;
+          gap: 24px;
+        }
+      }
+
+      @media (max-width: 620px) {
+        .nav {
+          gap: 14px;
+        }
+        .nav a {
+          font-size: 11px;
+        }
+        .foot-inner {
+          flex-direction: column;
+          gap: 6px;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <header class="topbar">
+      <div class="wrap topbar-inner">
+        <a class="mark" href="#top">M3.1 FLASH <span>/</span> 3D BENCH</a>
+        <nav class="nav" aria-label="페이지 이동">
+          <a href="#games">GAMES</a>
+          <a href="#checks">CHECKS</a>
+          <a href="#run">RUN</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="top">
+      <section class="wrap hero">
+        <div class="hero-main">
+          <p class="eyebrow"><b>MINIMAX M3.1 FLASH</b> · THREE.JS 0.186.1 · 빌드 단계 없음</p>
+          <h1>3D 게임 3종을<br />모델이 직접 만들었습니다</h1>
+          <p class="lede">
+            MiniMax M3.1 Flash가 세 개의 three.js 게임을 처음부터 끝까지 구현했습니다.
+            숫자는 <b>단위 테스트</b>가, 화면은 <b>4시점 자동 판정</b>이 확인합니다.
+            아래 카드에 적힌 수치는 모두 실제 실행 결과입니다.
+          </p>
+          <a class="cta btn-pulse" href="#games">게임 고르기</a>
+        </div>
+
+        <dl class="hero-stats">
+          <div>
+            <dt>게임</dt>
+            <dd data-check="totals.games" data-value="3">3종</dd>
+          </div>
+          <div>
+            <dt>단위 테스트</dt>
+            <dd data-check="totals.tests" data-value="45">45개</dd>
+          </div>
+          <div>
+            <dt>자동 검사 화면</dt>
+            <dd data-check="totals.views" data-value="9">9장</dd>
+          </div>
+          <div>
+            <dt>콘솔 오류</dt>
+            <dd data-check="totals.consoleErrors" data-value="0">0건</dd>
+          </div>
+          <div>
+            <dt>불변식 위반</dt>
+            <dd data-check="totals.invariantViolations" data-value="0">0건</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="wrap section" id="games">
+        <div class="section-head">
+          <span class="index">01</span>
+          <h2>GAMES</h2>
+          <p>카드를 누르면 그 자리에서 바로 플레이합니다. 마우스를 올리면 다른 각도가 차례로 보입니다.</p>
+        </div>
+
+        <div class="cards">
+          <article class="card" data-frames data-game="zoo">
+            <div class="card-media">
+              <img
+                class="card-frame is-active"
+                src="docs/cards/zoo-card.png"
+                alt="폴리곤 동물원 — 저폴리 판다와 고양이가 정원을 걷는 화면"
+              />
+              <img class="card-frame" src="docs/cards/zoo-side.png" alt="" />
+              <img class="card-frame" src="docs/cards/zoo-top.png" alt="" />
+            </div>
+            <div class="card-body">
+              <p class="card-index"><b>01</b> 절차적 모델링</p>
+              <h3>폴리곤 동물원</h3>
+              <p class="card-desc">
+                구·원기둥·원뿔만으로 고양이·강아지·판다·토끼를 조립하고 호흡·보행·점프를 붙였습니다.
+                종 파라미터 표 한 줄로 새 동물이 생깁니다.
+              </p>
+              <dl class="card-checks">
+                <div>
+                  <dt>단위 테스트</dt>
+                  <dd data-check="games.zoo.tests" data-value="12">12개</dd>
+                </div>
+                <div>
+                  <dt>콘솔 오류</dt>
+                  <dd data-check="games.zoo.consoleErrors" data-value="0">0건</dd>
+                </div>
+                <div>
+                  <dt>불변식 위반</dt>
+                  <dd data-check="games.zoo.invariantViolations" data-value="0">0건</dd>
+                </div>
+                <div>
+                  <dt>시점 간 화면 차이</dt>
+                  <dd data-check="games.zoo.viewDiffPercent" data-value="44">44%</dd>
+                </div>
+              </dl>
+              <button class="play" type="button" data-href="zoo/index.html" data-title="폴리곤 동물원">PLAY</button>
+            </div>
+          </article>
+
+          <article class="card" data-frames data-game="molecule">
+            <div class="card-media">
+              <img
+                class="card-frame is-active"
+                src="docs/cards/molecule-card.png"
+                alt="3D 분자 빌더 — 굽은형 물 분자의 결합각이 보이는 화면"
+              />
+              <img class="card-frame" src="docs/cards/molecule-side.png" alt="" />
+              <img class="card-frame" src="docs/cards/molecule-top.png" alt="" />
+            </div>
+            <div class="card-body">
+              <p class="card-index"><b>02</b> 화학 교육</p>
+              <h3>3D 분자 빌더</h3>
+              <p class="card-desc">
+                원자를 놓고 결합으로 이어 붙여 물·메테인·암모니아·이산화탄소를 만듭니다.
+                VSEPR 규칙으로 결합각(물 104.5°)까지 맞춰 모양을 잡아줍니다.
+              </p>
+              <dl class="card-checks">
+                <div>
+                  <dt>단위 테스트</dt>
+                  <dd data-check="games.molecule.tests" data-value="16">16개</dd>
+                </div>
+                <div>
+                  <dt>콘솔 오류</dt>
+                  <dd data-check="games.molecule.consoleErrors" data-value="0">0건</dd>
+                </div>
+                <div>
+                  <dt>불변식 위반</dt>
+                  <dd data-check="games.molecule.invariantViolations" data-value="0">0건</dd>
+                </div>
+                <div>
+                  <dt>시점 간 화면 차이</dt>
+                  <dd data-check="games.molecule.viewDiffPercent" data-value="21">21%</dd>
+                </div>
+              </dl>
+              <button class="play" type="button" data-href="molecule/index.html" data-title="3D 분자 빌더">PLAY</button>
+            </div>
+          </article>
+
+          <article class="card" data-frames data-game="defense">
+            <div class="card-media">
+              <img
+                class="card-frame is-active"
+                src="docs/cards/defense-card.png"
+                alt="3D 타워 디펜스 — 격자 보드 위에서 적이 길을 따라 오는 화면"
+              />
+              <img class="card-frame" src="docs/cards/defense-side.png" alt="" />
+              <img class="card-frame" src="docs/cards/defense-top.png" alt="" />
+            </div>
+            <div class="card-body">
+              <p class="card-index"><b>03</b> 실시간 전략</p>
+              <h3>3D 타워 디펜스</h3>
+              <p class="card-desc">
+                길에 고속·강력·범위 타워 3종을 세워 5개 웨이브의 적을 막습니다.
+                조준 규칙, 범위 피해, 골드 관리까지 전부 들어 있습니다.
+              </p>
+              <dl class="card-checks">
+                <div>
+                  <dt>단위 테스트</dt>
+                  <dd data-check="games.defense.tests" data-value="17">17개</dd>
+                </div>
+                <div>
+                  <dt>콘솔 오류</dt>
+                  <dd data-check="games.defense.consoleErrors" data-value="0">0건</dd>
+                </div>
+                <div>
+                  <dt>불변식 위반</dt>
+                  <dd data-check="games.defense.invariantViolations" data-value="0">0건</dd>
+                </div>
+                <div>
+                  <dt>시점 간 화면 차이</dt>
+                  <dd data-check="games.defense.viewDiffPercent" data-value="20">20%</dd>
+                </div>
+              </dl>
+              <button class="play" type="button" data-href="defense/index.html" data-title="3D 타워 디펜스">PLAY</button>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="wrap section" id="checks">
+        <div class="section-head">
+          <span class="index">02</span>
+          <h2>CHECKS</h2>
+          <p>3D는 값이 맞는 것과 화면에 보이는 것이 다릅니다. 그래서 검사를 세 층으로 나눴습니다.</p>
+        </div>
+
+        <div class="layers">
+          <div class="layer">
+            <span class="index">01</span>
+            <h3>순수 계산 검사</h3>
+            <p>
+              브라우저 없이 숫자로 확인합니다. 분자 결합각이 104.5° ± 0.5°인지, 동물이
+              겹치지 않는지, 적이 길을 따라 잘 움직이는지를 45개 테스트가 검사합니다.
+            </p>
+          </div>
+          <div class="layer">
+            <span class="index">02</span>
+            <h3>기하 불변식</h3>
+            <p>
+              0.5초마다 좌표 유한성, 개체 간 겹침, 길 위 설치 여부, 분자 축과 시선의 각도를
+              봅니다. 위반이 있으면 화면에 즉시 배지로 뜹니다.
+            </p>
+          </div>
+          <div class="layer">
+            <span class="index">03</span>
+            <h3>화면 판정</h3>
+            <p>
+              기본·정면·측면·상단 4시점에서 캡처해 아무 개체도 보이지 않거나 화면이 비면
+              실패 처리합니다. 이 파이프라인이 카드 이미지를 만듭니다.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="wrap section" id="run">
+        <div class="section-head">
+          <span class="index">03</span>
+          <h2>RUN</h2>
+          <p>빌드 단계가 없습니다. 정적 서버만 띄우면 바로 실행됩니다.</p>
+        </div>
+
+        <div class="run-grid">
+          <pre class="code"><div><span class="prompt">$</span><span class="cmd">cd minimax-m31-test</span></div><div><span class="prompt">$</span><span class="cmd">python3 -m http.server 5174</span></div><div><span class="note"># 브라우저에서 http://localhost:5174/</span></div></pre>
+          <div class="run-side">
+            <h3>검사 다시 돌리기</h3>
+            <p>
+              카드 이미지와 검사 수치를 다시 생성합니다. 랜딩에 적힌 수치가 실제 결과와 어긋나면
+              랜딩 검사가 실패합니다.
+            </p>
+            <button class="copy" type="button" data-copy="node minimax-m31-test/scripts/card-shots.mjs">
+              명령 복사
+            </button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="wrap foot-inner">
+        <span>MiniMax M3.1 Flash (free) · three.js 0.186.1 · 정적 파일만으로 구성</span>
+        <span>단위 테스트 45개 · 자동 검사 화면 9장</span>
+      </div>
+    </footer>
+
+    <dialog id="player" aria-label="게임 플레이">
+      <div class="player-bar">
+        <span class="name" id="player-name"></span>
+        <span class="spacer"></span>
+        <a id="player-external" href="#" target="_blank" rel="noopener">새 탭에서 열기</a>
+        <button id="player-close" type="button">닫기</button>
+      </div>
+      <iframe id="player-frame" title="게임" src="about:blank"></iframe>
+    </dialog>
+
+    <script type="module">
+      const dialog = document.getElementById("player");
+      const frame = document.getElementById("player-frame");
+      const playerName = document.getElementById("player-name");
+      const external = document.getElementById("player-external");
+
+      for (const button of document.querySelectorAll(".play")) {
+        button.addEventListener("click", () => {
+          const href = button.dataset.href;
+          const title = button.dataset.title;
+          playerName.textContent = title;
+          external.href = href;
+          frame.src = href;
+          frame.title = title;
+          dialog.showModal();
+        });
+      }
+
+      document.getElementById("player-close").addEventListener("click", () => dialog.close());
+      dialog.addEventListener("close", () => {
+        frame.src = "about:blank";
+      });
+
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+      for (const card of document.querySelectorAll("[data-frames]")) {
+        const frames = [...card.querySelectorAll(".card-frame")];
+        let index = 0;
+        let timer = null;
+
+        const show = (next) => {
+          frames[index].classList.remove("is-active");
+          index = (next + frames.length) % frames.length;
+          frames[index].classList.add("is-active");
+        };
+
+        const start = () => {
+          if (timer || reduceMotion.matches) return;
+          timer = setInterval(() => show(index + 1), 900);
+        };
+
+        const stop = () => {
+          if (timer) {
+            clearInterval(timer);
+            timer = null;
+          }
+          show(0);
+        };
+
+        card.addEventListener("mouseenter", start);
+        card.addEventListener("mouseleave", stop);
+        card.addEventListener("focusin", start);
+        card.addEventListener("focusout", stop);
+      }
+
+      for (const button of document.querySelectorAll(".copy")) {
+        button.addEventListener("click", async () => {
+          const text = button.dataset.copy;
+          try {
+            await navigator.clipboard.writeText(text);
+            button.textContent = "복사됨";
+          } catch {
+            button.textContent = text;
+          }
+          setTimeout(() => {
+            button.textContent = "명령 복사";
+          }, 1800);
+        });
+      }
+
+      window.__landingReady = true;
+    </script>
+  </body>
+</html>
