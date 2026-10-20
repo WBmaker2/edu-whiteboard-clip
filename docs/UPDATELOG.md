@@ -46,6 +46,7 @@
 
 ### 3D 프로젝트 개발 기준 저장소 분리
 - 3D 프로젝트는 `WBmaker2/m31-flash-3d-bench` 에서 계속 개발합니다. 4번째 게임(3D 도형 조립실)을 추가했고, 각 게임에 진행 기능(zoo 도감·찾기 게임, molecule 레벨·점수, defense 난이도·별점 기록)을 넣었습니다. 공개 주소 https://wbmaker2.github.io/m31-flash-3d-bench/
+- 3D 프로젝트를 정리했습니다. 자동 검사(GitHub Actions)를 붙이고, three.js 를 저장소 안에서 직접 불러오도록 바꾸고(학교망에서 CDN 이 막혀도 뜹니다), 화면 회귀 검사를 추가했습니다. 게임 4종의 모바일 레이아웃과 접근성도 보강했습니다. 공개 주소 https://wbmaker2.github.io/m31-flash-3d-bench/
 
 - 3D 게임 프로젝트의 **개발 기준 저장소를 `WBmaker2/m31-flash-3d-bench` 한 곳으로 모았습니다.** 이 저장소에서 개발·검사·배포(공개 주소 https://wbmaker2.github.io/m31-flash-3d-bench/)까지 진행합니다.
 - 이 저장소(판서랩)에 있던 3D 폴더 복제본과 검사 스크립트는 제거했습니다. 같은 코드를 두 곳에 두면 한쪽이 반드시 뒤처지고, 4번째 게임을 추가할 때 두 곳을 같이 고쳐야 했습니다.
