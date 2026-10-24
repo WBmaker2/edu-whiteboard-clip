@@ -80,13 +80,13 @@ function canUseWorker(): boolean {
 
 export async function exportMp4(options: Mp4ExportOptions): Promise<Mp4ExportResult> {
   if (!hasWebCodecs()) {
-    throw new Error("이 브라우저는 WebCodecs MP4 인코딩을 지원하지 않습니다.");
+    throw new Error("export.unsupportedMp4");
   }
   await ensureExportFonts();
   const preset = resolutionPreset(options.resolution, options.aspect ?? "16:9");
   const codec = await pickVideoCodec(preset.width, preset.height);
   if (!codec) {
-    throw new Error("이 브라우저에서 사용할 수 있는 H.264 인코더를 찾지 못했습니다.");
+    throw new Error("export.noH264");
   }
   if (canUseWorker()) {
     try {
@@ -265,7 +265,7 @@ async function exportMp4WithWorker(
       if (state === "unsupported") {
         throw new WorkerUnsupportedError("이 환경에서는 워커 인코딩을 사용할 수 없습니다.");
       }
-      throw new Error("MP4 인코더를 준비하지 못했습니다.");
+      throw new Error("export.encoderFailed");
     }
     throwIfAborted(signal);
 
@@ -286,7 +286,7 @@ async function exportMp4WithWorker(
     canvas.style.top = "0";
     document.body.appendChild(canvas);
     const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("캔버스를 초기화하지 못했습니다.");
+    if (!ctx) throw new Error("export.canvasFailed");
     const scale = preset.width / canvasProfile(aspect ?? "16:9").base;
     ctx.scale(scale, scale);
 
@@ -390,7 +390,7 @@ async function exportMp4OnMainThread(
   canvas.style.top = "0";
   document.body.appendChild(canvas);
   const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("캔버스를 초기화하지 못했습니다.");
+  if (!ctx) throw new Error("export.canvasFailed");
   const scale = preset.width / canvasProfile(aspect ?? "16:9").base;
   ctx.scale(scale, scale);
 
@@ -519,7 +519,7 @@ async function exportMp4OnMainThread(
     if (encoderError) throw encoderError;
     muxer.finalize();
     const buffer = (muxer.target as ArrayBufferTarget).buffer;
-    if (!buffer) throw new Error("MP4 파일을 만들지 못했습니다.");
+    if (!buffer) throw new Error("export.mp4Failed");
     onProgress?.(100, "MP4 파일이 준비되었습니다.");
     return {
       blob: new Blob([buffer], { type: "video/mp4" }),

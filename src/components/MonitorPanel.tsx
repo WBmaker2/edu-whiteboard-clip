@@ -27,10 +27,12 @@ import { useStudioStore } from "../store/studioStore";
 import { usePlayback } from "../hooks/usePlayback";
 import { useAssetImages } from "../hooks/useAssetImages";
 import { useI18n } from "../lib/i18n";
+import { localLabel } from "../lib/labels";
 import { PlayerControls } from "./PlayerControls";
 import { StoryboardList } from "./StoryboardList";
 import { canvasProfile, renderPoster } from "../lib/renderer";
 import { THEMES } from "../data/presets";
+import { ensureExportFonts } from "../lib/fonts";
 import type { RecordedResult } from "../hooks/useRecorder";
 
 interface MonitorPanelProps {
@@ -73,7 +75,7 @@ export function MonitorPanel({
   onRecorded,
   onLanguageChange,
 }: MonitorPanelProps) {
-  const { t } = useI18n();
+  const { t, te, language } = useI18n();
   const store = useStudioStore(
     useShallow((state) => ({
       themeId: state.themeId,
@@ -128,7 +130,7 @@ export function MonitorPanel({
       store.pushToast(
         "error",
         error instanceof Error
-          ? t("monitor.renderErrorReason", { message: error.message })
+          ? t("monitor.renderErrorReason", { message: te(error.message) })
           : t("monitor.renderError"),
       );
     },
@@ -141,11 +143,22 @@ export function MonitorPanel({
 
   useEffect(() => {
     if (project) return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    renderPoster(ctx, themeId, store.aspect);
+    let cancelled = false;
+    const draw = () => {
+      if (cancelled) return;
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      renderPoster(ctx, themeId, store.aspect);
+    };
+    draw();
+    void ensureExportFonts().then(draw);
+    void document.fonts?.ready.then(draw);
+    return () => {
+      cancelled = true;
+    };
   }, [project, themeId, store.aspect]);
 
   useEffect(() => {
@@ -193,7 +206,7 @@ export function MonitorPanel({
               <MonitorUp size={15} />
               {t("monitor.title")}
             </span>
-            <span className="soft-chip">{theme.name}</span>
+            <span className="soft-chip">{localLabel(language, "theme", theme.id, "name", theme.name)}</span>
             {project && (
               <span className="soft-chip is-blue">
                 {t("monitor.sceneCountLabel", { count: project.scenes.length })} · {formatRuntime(playback.duration)}

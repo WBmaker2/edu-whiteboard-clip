@@ -51,7 +51,7 @@ export function useRecorder() {
 
   const start = useCallback(async (sceneIndex: number): Promise<void> => {
     if (!navigator.mediaDevices?.getUserMedia) {
-      throw new Error("이 브라우저에서는 마이크 녹음을 지원하지 않습니다.");
+      throw new Error("recorder.unsupported");
     }
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     const recorder = new MediaRecorder(stream);

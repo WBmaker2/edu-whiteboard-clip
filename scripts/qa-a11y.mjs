@@ -49,6 +49,64 @@ await run("저장 기록 모달");
 await page.keyboard.press("Escape");
 await page.waitForTimeout(200);
 
+await page.getByRole("button", { name: "프로젝트", exact: true }).click();
+await page.getByRole("menuitem", { name: /내 수업/ }).click();
+await page.getByRole("dialog", { name: "내 수업" }).waitFor({ timeout: 15000 });
+await page.waitForTimeout(300);
+await run("내 수업 보관함");
+await page.keyboard.press("Escape");
+await page.waitForTimeout(200);
+
+await page.getByRole("button", { name: "A4 학습지" }).click();
+await page.getByRole("dialog", { name: "수업용 A4 요약 학습지" }).waitFor({ timeout: 15000 });
+await page.waitForTimeout(300);
+await run("A4 학습지");
+await page.keyboard.press("Escape");
+await page.waitForTimeout(200);
+
+await page.getByRole("button", { name: "AI 퀴즈" }).click();
+await page.getByRole("dialog", { name: "AI 웹 퀴즈" }).waitFor({ timeout: 15000 });
+await page.waitForTimeout(300);
+await run("AI 퀴즈");
+await page.keyboard.press("Escape");
+await page.waitForTimeout(200);
+
+await page.getByRole("button", { name: "썸네일/카드" }).click();
+await page.waitForTimeout(1200);
+await run("썸네일/카드뉴스");
+await page.keyboard.press("Escape");
+await page.waitForTimeout(200);
+
+await page.getByRole("button", { name: "비디오 내보내기" }).click();
+await page.getByRole("dialog", { name: "비디오 내보내기" }).waitFor({ timeout: 15000 });
+await page.waitForTimeout(300);
+await run("비디오 내보내기");
+await page.keyboard.press("Escape");
+await page.waitForTimeout(300);
+
+await page.getByRole("button", { name: "발표 모드" }).click();
+await page.waitForTimeout(700);
+await run("발표 모드");
+await page.keyboard.press("Escape");
+await page.waitForTimeout(300);
+
+await page.locator(".scene-card").first().getByRole("button", { name: "AI로 다시 쓰기" }).click();
+await page.getByRole("dialog", { name: "AI로 장면 다시 쓰기" }).waitFor({ timeout: 15000 });
+await page.waitForTimeout(300);
+await run("장면 다시 쓰기");
+await page.keyboard.press("Escape");
+await page.waitForTimeout(200);
+
+await page.getByRole("combobox", { name: "표시 언어" }).selectOption("en");
+await page.waitForTimeout(400);
+await run("설정 화면 (English)");
+await page.getByRole("button", { name: "Project", exact: true }).click();
+await page.getByRole("menuitem", { name: /My lessons/ }).click();
+await page.getByRole("dialog", { name: "My lessons" }).waitFor({ timeout: 15000 });
+await page.waitForTimeout(300);
+await run("내 수업 보관함 (English)");
+await page.keyboard.press("Escape");
+
 await browser.close();
 
 const failures = results.filter((result) => result.serious.length > 0);

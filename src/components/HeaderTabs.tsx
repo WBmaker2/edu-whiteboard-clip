@@ -21,7 +21,7 @@ interface HeaderTabsProps {
   onTab: (tab: StudioTab) => void;
   project: Project | null;
   onNewProject: () => void;
-  onLoadDraft: () => void;
+  onOpenLibrary: () => void;
   onImportProject: () => void;
   onShowShortcuts: () => void;
 }
@@ -31,7 +31,7 @@ export function HeaderTabs({
   onTab,
   project,
   onNewProject,
-  onLoadDraft,
+  onOpenLibrary,
   onImportProject,
   onShowShortcuts,
 }: HeaderTabsProps) {
@@ -178,13 +178,13 @@ export function HeaderTabs({
                   tabIndex={-1}
                   onClick={() => {
                     setMenuOpen(false);
-                    onLoadDraft();
+                    onOpenLibrary();
                   }}
                 >
                   <FolderOpen size={15} />
                   <span>
-                    <strong>{t("header.loadDraft")}</strong>
-                    <small>{t("header.loadDraftDesc")}</small>
+                    <strong>{t("header.myProjects")}</strong>
+                    <small>{t("header.myProjectsDesc")}</small>
                   </span>
                 </button>
                 <button

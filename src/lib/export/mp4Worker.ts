@@ -62,7 +62,7 @@ function closeEncoders(): void {
 }
 
 async function encodeAudio(message: AudioMessage): Promise<void> {
-  if (!audioEncoder || !muxer) throw new Error("인코더가 준비되지 않았습니다.");
+  if (!audioEncoder || !muxer) throw new Error("export.encoderNotReady");
   const data = new Float32Array(message.data);
   const totalFrames = Math.floor(data.length / audioConfig.numberOfChannels);
   const channel0 = data.subarray(0, totalFrames);
@@ -94,7 +94,7 @@ async function encodeAudio(message: AudioMessage): Promise<void> {
 }
 
 async function encodeFrame(message: FrameMessage): Promise<void> {
-  if (!videoEncoder) throw new Error("인코더가 준비되지 않았습니다.");
+  if (!videoEncoder) throw new Error("export.encoderNotReady");
   if (encoderError) {
     message.bitmap.close();
     throw encoderError;
@@ -183,12 +183,12 @@ scope.onmessage = (event: MessageEvent) => {
         return;
       }
       if (message.type === "finish") {
-        if (!videoEncoder || !muxer) throw new Error("인코더가 준비되지 않았습니다.");
+        if (!videoEncoder || !muxer) throw new Error("export.encoderNotReady");
         await videoEncoder.flush();
         if (encoderError) throw encoderError;
         muxer.finalize();
         const buffer = (muxer.target as ArrayBufferTarget).buffer;
-        if (!buffer) throw new Error("MP4 파일을 만들지 못했습니다.");
+        if (!buffer) throw new Error("export.mp4Failed");
         scope.postMessage({ type: "done", buffer }, [buffer]);
       }
     } catch (error) {

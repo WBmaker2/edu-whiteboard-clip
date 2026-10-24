@@ -572,6 +572,35 @@
   box-shadow: 0 0 0 3px rgba(47, 91, 234, 0.06);
 }
 
+.scene-card.is-drag-over {
+  border-color: #8ea6f4;
+  box-shadow: 0 0 0 3px rgba(47, 91, 234, 0.1);
+}
+
+.scene-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 7px;
+  color: var(--muted-light);
+  cursor: grab;
+  flex-shrink: 0;
+}
+
+.scene-drag-handle:hover,
+.scene-drag-handle:focus-visible {
+  color: var(--accent-strong);
+  border-color: #b7c5f6;
+  background: var(--accent-soft);
+}
+
+.scene-drag-handle:active {
+  cursor: grabbing;
+}
+
 .scene-card-summary {
   width: 100%;
   border: 0;
@@ -848,4 +877,11 @@
   width: auto;
   max-width: 100%;
   margin: 0 auto;
+}
+
+.monitor-loading {
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 11px;
 }

@@ -1,7 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { loadDraft } from "../lib/storage";
 import { downloadProject } from "../lib/export/project";
-import { translate } from "../lib/i18n";
+import { localizeError, translate } from "../lib/i18n";
 import { useStudioStore } from "../store/studioStore";
 import { CrashScreen } from "./CrashScreen";
 
@@ -58,7 +58,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
         downloading: false,
         draftMessage:
           error instanceof Error
-            ? this.t("crash.downloadFailedReason", { message: error.message })
+            ? this.t("crash.downloadFailedReason", { message: localizeError(useStudioStore.getState().language, error.message) })
             : this.t("crash.downloadFailed"),
       });
     }

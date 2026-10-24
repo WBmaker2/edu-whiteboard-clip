@@ -68,8 +68,7 @@ await page.getByRole("button", { name: "초안 저장" }).first().click();
 await page.waitForTimeout(600);
 await page.reload();
 await page.waitForLoadState("networkidle");
-await page.getByRole("button", { name: "프로젝트", exact: true }).click();
-await page.getByRole("menuitem", { name: /초안 불러오기/ }).click();
+await page.getByRole("button", { name: "이어서 작업" }).click();
 await page.waitForTimeout(800);
 check("draft load", (await page.getByRole("tab", { name: /정리/ }).count()) > 0);
 

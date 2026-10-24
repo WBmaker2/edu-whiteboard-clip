@@ -15,7 +15,7 @@ interface MaterialsModalProps {
 }
 
 export function MaterialsModal({ open, project, onClose }: MaterialsModalProps) {
-  const { t } = useI18n();
+  const { t, te } = useI18n();
   const store = useStudioStore(
     useShallow((state) => ({
       pushToast: state.pushToast,
@@ -41,7 +41,7 @@ export function MaterialsModal({ open, project, onClose }: MaterialsModalProps) 
         if (!cancelled) {
           store.pushToast(
             "error",
-            error instanceof Error ? error.message : t("materials.buildFailed"),
+            error instanceof Error ? te(error.message) : t("materials.buildFailed"),
           );
         }
       })

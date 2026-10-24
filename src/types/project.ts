@@ -87,6 +87,8 @@ export interface DraftSnapshot {
 
 export interface Project {
   version: 2;
+  id?: string;
+  title?: string;
   topic: string;
   themeId: ThemeId;
   visualStyle: VisualStyle;
@@ -99,6 +101,20 @@ export interface Project {
   bgmId: string;
   scenes: Scene[];
   savedAt: string;
+}
+
+export interface ProjectSummary {
+  id: string;
+  title: string;
+  topic: string;
+  createdAt: string;
+  updatedAt: string;
+  sceneCount: number;
+  duration: number;
+  aspect: AspectRatio;
+  themeId: ThemeId;
+  hasAudio: boolean;
+  bytes: number;
 }
 
 export interface ThemePalette {

@@ -46,6 +46,7 @@ import {
 } from "../lib/templates";
 import { downloadText, sanitizeFileName } from "../lib/download";
 import { GRADE_LEVELS, SUBJECTS } from "../data/curriculum";
+import { localBadge, localGrade, localLabel, localSubject } from "../lib/labels";
 import { useI18n } from "../lib/i18n";
 
 interface SettingsPanelProps {
@@ -57,7 +58,7 @@ interface SettingsPanelProps {
 type CheckState = { status: "idle" | "checking" | "ok" | "error"; message: string };
 
 export function SettingsPanel({ onGenerate, onDemo, onCancelGenerate }: SettingsPanelProps) {
-  const { t, language } = useI18n();
+  const { t, te, language } = useI18n();
   const store = useStudioStore(
     useShallow((state) => ({
       apiKey: state.apiKey,
@@ -138,7 +139,7 @@ export function SettingsPanel({ onGenerate, onDemo, onCancelGenerate }: Settings
       store.pushToast(
         "error",
         error instanceof Error
-          ? t("settings.templateSaveFailedReason", { message: error.message })
+          ? t("settings.templateSaveFailedReason", { message: te(error.message) })
           : t("settings.templateSaveFailed"),
       );
     }
@@ -173,7 +174,7 @@ export function SettingsPanel({ onGenerate, onDemo, onCancelGenerate }: Settings
     } catch (error) {
       store.pushToast(
         "error",
-        error instanceof Error ? error.message : t("settings.templateImportFailed"),
+        error instanceof Error ? te(error.message) : t("settings.templateImportFailed"),
       );
     }
   };
@@ -283,7 +284,7 @@ export function SettingsPanel({ onGenerate, onDemo, onCancelGenerate }: Settings
         </div>
         {checkState.message && (
           <p className={`inline-note ${checkState.status === "error" ? "is-error" : "is-ok"}`}>
-            {checkState.message}
+            {te(checkState.message)}
           </p>
         )}
       </section>
@@ -363,8 +364,14 @@ export function SettingsPanel({ onGenerate, onDemo, onCancelGenerate }: Settings
                         : t("settings.aspectLandscapeShort")}{" "}
                       ·{" "}
                       {template.themeId === "auto"
-                        ? "주제 자동 추천"
-                        : THEMES[template.themeId]?.name ?? template.themeId}
+                        ? localLabel(language, "theme", "auto", "name", "주제 자동 추천")
+                        : localLabel(
+                            language,
+                            "theme",
+                            template.themeId,
+                            "name",
+                            THEMES[template.themeId]?.name ?? template.themeId,
+                          )}
                     </small>
                   </button>
                   <button
@@ -414,7 +421,7 @@ export function SettingsPanel({ onGenerate, onDemo, onCancelGenerate }: Settings
             >
               {GRADE_LEVELS.map((level) => (
                 <option key={level.id} value={level.id}>
-                  {level.label}
+                  {localGrade(language, level.id, level.label)}
                 </option>
               ))}
             </select>
@@ -428,7 +435,9 @@ export function SettingsPanel({ onGenerate, onDemo, onCancelGenerate }: Settings
             >
               {SUBJECTS.map((subject) => (
                 <option key={subject} value={subject}>
-                  {subject || t("settings.noSubject")}
+                  {subject
+                    ? localSubject(language, subject, subject)
+                    : t("settings.noSubject")}
                 </option>
               ))}
             </select>
@@ -461,8 +470,12 @@ export function SettingsPanel({ onGenerate, onDemo, onCancelGenerate }: Settings
               onClick={() => store.setVisualStyle(option.id)}
             >
               <span className="option-top">
-                <span className="option-title">{option.name}</span>
-                <span className="option-desc">{option.desc}</span>
+                <span className="option-title">
+                  {localLabel(language, "visual", option.id, "name", option.name)}
+                </span>
+                <span className="option-desc">
+                  {localLabel(language, "visual", option.id, "desc", option.desc)}
+                </span>
               </span>
               <span className="radio-dot" aria-hidden="true" />
             </button>
@@ -488,10 +501,16 @@ export function SettingsPanel({ onGenerate, onDemo, onCancelGenerate }: Settings
             >
               <span className="option-top">
                 <span className="option-title-with-badge">
-                  <span className="option-title">{option.name}</span>
-                  {option.badge && <span className="tiny-badge">{option.badge}</span>}
+                  <span className="option-title">
+                    {localLabel(language, "layout", option.id, "name", option.name)}
+                  </span>
+                  {option.badge && (
+                    <span className="tiny-badge">{localBadge(language, option.badge, "")}</span>
+                  )}
                 </span>
-                <span className="option-desc">{option.desc}</span>
+                <span className="option-desc">
+                  {localLabel(language, "layout", option.id, "desc", option.desc)}
+                </span>
               </span>
               <span className="radio-dot" aria-hidden="true" />
             </button>
@@ -525,8 +544,18 @@ export function SettingsPanel({ onGenerate, onDemo, onCancelGenerate }: Settings
               <span style={{ background: "#2f5bea" }} />
             </span>
             <span className="theme-meta">
-              <span className="option-title">주제 자동 추천</span>
-              <span className="option-desc">주제·교과에 맞춰 자동 선택 (추천)</span>
+              <span className="option-title">
+                {localLabel(language, "theme", "auto", "name", "주제 자동 추천")}
+              </span>
+              <span className="option-desc">
+                {localLabel(
+                  language,
+                  "theme",
+                  "auto",
+                  "desc",
+                  "주제·교과에 맞춰 자동 선택 (추천)",
+                )}
+              </span>
             </span>
             <span className="radio-dot" aria-hidden="true" />
           </button>
@@ -548,8 +577,12 @@ export function SettingsPanel({ onGenerate, onDemo, onCancelGenerate }: Settings
                 <span style={{ background: theme.accent }} />
               </span>
               <span className="theme-meta">
-                <span className="option-title">{theme.name}</span>
-                <span className="option-desc">{theme.desc}</span>
+                <span className="option-title">
+                  {localLabel(language, "theme", theme.id, "name", theme.name)}
+                </span>
+                <span className="option-desc">
+                  {localLabel(language, "theme", theme.id, "desc", theme.desc)}
+                </span>
               </span>
               <span className="radio-dot" aria-hidden="true" />
             </button>
@@ -626,9 +659,13 @@ export function SettingsPanel({ onGenerate, onDemo, onCancelGenerate }: Settings
               <span className="option-top">
                 <span className="option-title-with-badge">
                   <span className="option-title">{model.name}</span>
-                  {model.badge && <span className="tiny-badge">{model.badge}</span>}
+                  {model.badge && (
+                    <span className="tiny-badge">{localBadge(language, model.badge, "")}</span>
+                  )}
                 </span>
-                <span className="option-desc">{model.desc}</span>
+                <span className="option-desc">
+                  {localLabel(language, "model", model.id, "desc", model.desc)}
+                </span>
               </span>
               <span className="radio-dot" aria-hidden="true" />
             </button>
@@ -646,9 +683,13 @@ export function SettingsPanel({ onGenerate, onDemo, onCancelGenerate }: Settings
                 <span className="option-top">
                   <span className="option-title-with-badge">
                     <span className="option-title">{model.name}</span>
-                    {model.badge && <span className="tiny-badge">{model.badge}</span>}
+                    {model.badge && (
+                      <span className="tiny-badge">{localBadge(language, model.badge, "")}</span>
+                    )}
                   </span>
-                  <span className="option-desc">{model.desc}</span>
+                  <span className="option-desc">
+                    {localLabel(language, "tts", model.id, "desc", model.desc)}
+                  </span>
                 </span>
                 <span className="radio-dot" aria-hidden="true" />
               </button>
@@ -678,7 +719,7 @@ export function SettingsPanel({ onGenerate, onDemo, onCancelGenerate }: Settings
               onClick={() => store.patch({ voice: voice.id })}
             >
               <strong>{voice.name}</strong>
-              <small>{voice.desc}</small>
+              <small>{localLabel(language, "voice", voice.id, "desc", voice.desc)}</small>
             </button>
           ))}
         </div>

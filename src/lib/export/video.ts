@@ -55,11 +55,11 @@ async function exportWebm({
   onProgress,
 }: ExportVideoOptions): Promise<ExportVideoResult> {
   if (typeof MediaRecorder === "undefined") {
-    throw new Error("이 브라우저는 영상 녹화(MediaRecorder)를 지원하지 않습니다.");
+    throw new Error("export.unsupportedRecorder");
   }
   const mimeType = chooseWebmMime();
   if (!mimeType) {
-    throw new Error("이 브라우저에서 사용할 수 있는 영상 형식이 없습니다. Chrome 최신 버전을 권장합니다.");
+    throw new Error("export.noVideoFormat");
   }
   const preset = resolutionPreset(resolution, aspect ?? "16:9");
   const canvas = document.createElement("canvas");
@@ -70,7 +70,7 @@ async function exportWebm({
   canvas.style.top = "0";
   document.body.appendChild(canvas);
   const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("캔버스를 초기화하지 못했습니다.");
+  if (!ctx) throw new Error("export.canvasFailed");
   const scale = preset.width / canvasProfile(aspect ?? "16:9").base;
   ctx.scale(scale, scale);
 
@@ -78,7 +78,7 @@ async function exportWebm({
   let recorder: MediaRecorder | null = null;
   let raf = 0;
   try {
-    onProgress?.(2, "오디오와 캔버스를 준비하는 중...");
+    onProgress?.(2, "export.progressPrepare");
     await ensureExportFonts();
     const assetImages = await preloadProjectImages(project);
     await engine.loadProject(project);
@@ -130,7 +130,7 @@ async function exportWebm({
     recorder.start(1000);
     const total = projectDuration(project);
     await engine.play(0, 1);
-    onProgress?.(5, "장면을 실시간으로 인코딩하는 중...");
+    onProgress?.(5, "export.progressRecording");
 
     await new Promise<void>((resolve, reject) => {
       const tick = () => {
@@ -162,7 +162,7 @@ async function exportWebm({
           assetImages,
         });
         const percent = Math.min(95, 5 + Math.round((time / total) * 90));
-        onProgress?.(percent, `${index + 1}/${project.scenes.length} 장면 인코딩 중...`);
+        onProgress?.(percent, "export.progressScene");
         if (time >= total - 0.05) {
           const lastScene = project.scenes[project.scenes.length - 1];
           renderScene(ctx, lastScene, Math.max(0, lastScene.duration - 0.001), {
@@ -186,7 +186,7 @@ async function exportWebm({
       raf = requestAnimationFrame(tick);
     });
 
-    onProgress?.(97, "영상 파일을 마무리하는 중...");
+    onProgress?.(97, "export.progressFinalize");
     if (recorder.state !== "inactive") {
       recorder.requestData();
       recorder.stop();
@@ -194,9 +194,9 @@ async function exportWebm({
     await stopped;
     await engine.dispose();
     const raw = new Blob(chunks, { type: mimeType });
-    if (raw.size === 0) throw new Error("빈 영상이 생성되었습니다. 다시 시도해 주세요.");
+    if (raw.size === 0) throw new Error("export.emptyVideo");
     const blob = await withWebmDuration(raw, total * 1000);
-    onProgress?.(100, "영상 파일이 준비되었습니다.");
+    onProgress?.(100, "export.progressReady");
     return { blob, mimeType, extension: "webm" };
   } catch (error) {
     if (recorder && recorder.state !== "inactive") {
@@ -223,12 +223,12 @@ export async function exportVideo(
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") throw error;
         options.onFormatFallback?.(
-          "MP4 인코딩 중 문제가 발생해 WebM으로 대신 저장합니다.",
+          "export.mp4Fallback",
         );
       }
     } else {
       options.onFormatFallback?.(
-        "이 브라우저에서는 MP4를 지원하지 않아 WebM으로 저장합니다.",
+        "export.mp4Unsupported",
       );
     }
   }

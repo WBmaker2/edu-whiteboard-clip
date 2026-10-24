@@ -30,6 +30,10 @@ await page.goto(BASE);
 await page.waitForLoadState("networkidle");
 await page.evaluate(() => document.fonts.ready);
 await page.waitForTimeout(400);
+await page.getByRole("tab", { name: /영상 모니터/ }).click();
+await page.waitForTimeout(800);
+await page.evaluate(() => document.fonts.ready);
+await page.waitForTimeout(3500);
 
 const canvas = page.locator("canvas.stage-canvas");
 

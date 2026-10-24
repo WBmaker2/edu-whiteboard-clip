@@ -570,6 +570,31 @@
   gap: 7px;
 }
 
+.pwa-update-banner {
+  max-width: 1460px;
+  width: calc(100% - 48px);
+  margin: 12px auto 0;
+  padding: 12px 16px;
+  border: 1px solid #c9e3d4;
+  background: linear-gradient(180deg, #f2fbf6, #eaf8f0);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.pwa-update-banner strong {
+  font-size: 12.5px;
+}
+
+.pwa-update-banner p {
+  margin: 2px 0 0;
+  font-size: 10.5px;
+  color: #3d6b55;
+}
+
 .format-pill select {
   max-width: 64px;
 }
@@ -668,6 +693,233 @@
   max-width: 420px;
   font-size: 10.5px;
   line-height: 1.6;
+}
+
+.history-empty small {
+  max-width: 420px;
+  font-size: 9.5px;
+  line-height: 1.6;
+  color: var(--muted-light);
+}
+
+/* Lesson library */
+.library-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.library-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.library-search {
+  flex: 1;
+  min-width: 180px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fff;
+  padding: 7px 10px;
+  color: var(--muted);
+}
+
+.library-search input {
+  flex: 1;
+  border: 0;
+  outline: 0;
+  font: inherit;
+  font-size: 11px;
+  color: var(--ink);
+  background: transparent;
+}
+
+.library-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.library-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-alt);
+  padding: 10px 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.library-card.is-current {
+  border-color: #b9c8ff;
+  background: #f7f9ff;
+}
+
+.library-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+}
+
+.library-theme-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-top: 4px;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 3px rgba(47, 91, 234, 0.09);
+}
+
+.library-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.library-meta strong {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library-meta small {
+  display: block;
+  margin-top: 2px;
+  font-size: 9.5px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library-meta .library-topic {
+  color: var(--muted-light);
+}
+
+.library-current {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 8.5px;
+  font-weight: 750;
+}
+
+.library-audio {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted-light);
+  font-size: 9px;
+  font-weight: 650;
+}
+
+.library-audio.has-audio {
+  color: #0f7a55;
+}
+
+.library-actions,
+.library-confirm,
+.library-rename {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.library-actions {
+  padding-left: 19px;
+}
+
+.library-confirm {
+  padding: 7px 9px;
+  border: 1px solid #ecc2c2;
+  border-radius: 8px;
+  background: #fff7f7;
+  color: #8f3434;
+  font-size: 10px;
+}
+
+.library-confirm span {
+  flex: 1;
+  min-width: 150px;
+}
+
+.library-rename {
+  flex: 1;
+}
+
+.library-rename input {
+  flex: 1;
+  min-width: 120px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  padding: 5px 8px;
+  font: inherit;
+  font-size: 11px;
+}
+
+.mini-button.is-danger {
+  border-color: #ecc2c2;
+  color: #a63a3a;
+  background: #fff7f7;
+}
+
+.mini-button.is-danger:hover {
+  background: var(--danger-soft);
+  border-color: #dfa9a9;
+}
+
+.library-warning {
+  padding: 8px 10px;
+  border: 1px solid #f0cfa0;
+  border-radius: 8px;
+  background: #fff6e8;
+  color: #8a4b00;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.library-backup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
+}
+
+.library-backup-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.library-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 9.5px;
+}
+
+.library-check input {
+  width: 12px;
+  height: 12px;
 }
 
 /* Rewrite modal */

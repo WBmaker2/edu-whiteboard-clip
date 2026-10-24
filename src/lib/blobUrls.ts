@@ -1,3 +1,5 @@
+import type { Project } from "../types/project";
+
 const urlByBlob = new WeakMap<Blob, string>();
 
 /**
@@ -21,5 +23,14 @@ export function releaseBlobUrl(blob?: Blob | null): void {
   if (cached) {
     URL.revokeObjectURL(cached);
     urlByBlob.delete(blob);
+  }
+}
+
+/** Releases audio and asset URLs after a project is closed and its history cleared. */
+export function releaseProjectUrls(project?: Project | null): void {
+  if (!project) return;
+  for (const scene of project.scenes) releaseBlobUrl(scene.audioBlob);
+  for (const asset of Object.values(project.assets ?? {})) {
+    releaseBlobUrl(asset.blob);
   }
 }

@@ -24,7 +24,7 @@ interface QuizModalProps {
 }
 
 export function QuizModal({ open, project, onClose }: QuizModalProps) {
-  const { t } = useI18n();
+  const { t, te } = useI18n();
   const store = useStudioStore(
     useShallow((state) => ({
       apiKey: state.apiKey,
@@ -39,6 +39,7 @@ export function QuizModal({ open, project, onClose }: QuizModalProps) {
   const [submitted, setSubmitted] = useState(false);
   const [essayFeedback, setEssayFeedback] = useState<Record<number, { score: number; feedback: string }>>({});
   const [grading, setGrading] = useState(false);
+  const [manualShareUrl, setManualShareUrl] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -74,12 +75,13 @@ export function QuizModal({ open, project, onClose }: QuizModalProps) {
           t("quiz.toastLinkCopied"),
         );
       } catch {
-        window.prompt(t("quiz.promptCopyLink"), url);
+        setManualShareUrl(url);
+        store.pushToast("info", t("quiz.promptCopyLink"));
       }
     } catch (error) {
       store.pushToast(
         "error",
-        error instanceof Error ? error.message : t("quiz.toastLinkFailed"),
+        error instanceof Error ? te(error.message) : t("quiz.toastLinkFailed"),
       );
     }
   };
@@ -119,7 +121,7 @@ export function QuizModal({ open, project, onClose }: QuizModalProps) {
     } catch (error) {
       store.pushToast(
         "error",
-        error instanceof Error ? error.message : t("quiz.toastAiGradingFailed"),
+        error instanceof Error ? te(error.message) : t("quiz.toastAiGradingFailed"),
       );
     } finally {
       setGrading(false);
@@ -163,6 +165,20 @@ export function QuizModal({ open, project, onClose }: QuizModalProps) {
       }
     >
       <div className="quiz-shell">
+        {manualShareUrl && (
+          <div className="share-link-fallback">
+            <p>{t("quiz.promptCopyLink")}</p>
+            <input
+              readOnly
+              value={manualShareUrl}
+              aria-label={t("quiz.copyStudentLink")}
+              onFocus={(event) => event.currentTarget.select()}
+            />
+            <button type="button" className="mini-button" onClick={() => setManualShareUrl("")}>
+              {t("common.close")}
+            </button>
+          </div>
+        )}
         <div className="quiz-scorebar">
           <div>
             <span className="eyebrow">{t("quiz.sectionEyebrow")}</span>

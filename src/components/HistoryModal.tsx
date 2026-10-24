@@ -14,6 +14,7 @@ import { useI18n } from "../lib/i18n";
 
 interface HistoryModalProps {
   open: boolean;
+  projectId?: string;
   onClose: () => void;
 }
 
@@ -29,8 +30,8 @@ function relativeTime(iso: string, t: Translate): string {
   return t("history.daysAgo", { count: Math.floor(hours / 24) });
 }
 
-export function HistoryModal({ open, onClose }: HistoryModalProps) {
-  const { t } = useI18n();
+export function HistoryModal({ open, projectId, onClose }: HistoryModalProps) {
+  const { t, te } = useI18n();
   const store = useStudioStore(
     useShallow((state) => ({
       loadProject: state.loadProject,
@@ -45,18 +46,18 @@ export function HistoryModal({ open, onClose }: HistoryModalProps) {
   useEffect(() => {
     if (!open) return;
     setLoading(true);
-    void Promise.all([listSnapshots(), estimateStorage()])
+    void Promise.all([listSnapshots(projectId), estimateStorage()])
       .then(([items, estimate]) => {
         setSnapshots(items);
         setStorage(estimate);
       })
       .finally(() => setLoading(false));
-  }, [open]);
+  }, [open, projectId]);
 
   const restore = async (id: string) => {
     setRestoring(id);
     try {
-      const project = await restoreSnapshot(id);
+      const project = await restoreSnapshot(projectId, id);
       if (!project) {
         store.pushToast("error", t("history.notFound"));
         return;
@@ -68,7 +69,7 @@ export function HistoryModal({ open, onClose }: HistoryModalProps) {
       store.pushToast(
         "error",
         error instanceof Error
-          ? t("history.restoreFailedReason", { message: error.message })
+          ? t("history.restoreFailedReason", { message: te(error.message) })
           : t("history.restoreFailed"),
       );
     } finally {
@@ -77,7 +78,7 @@ export function HistoryModal({ open, onClose }: HistoryModalProps) {
   };
 
   const remove = async (id: string) => {
-    const next = await deleteSnapshot(id);
+    const next = await deleteSnapshot(projectId, id);
     setSnapshots(next);
     store.pushToast("info", t("history.deleted"));
   };

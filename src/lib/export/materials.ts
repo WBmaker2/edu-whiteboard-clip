@@ -62,7 +62,7 @@ function canvasToImage(
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
       if (!blob) {
-        reject(new Error("이미지를 생성하지 못했습니다."));
+        reject(new Error("export.materialsFailed"));
         return;
       }
       resolve({
@@ -88,7 +88,7 @@ export async function buildMaterials(project: Project): Promise<{
   thumbnailCanvas.width = 1280;
   thumbnailCanvas.height = 720;
   const thumb = thumbnailCanvas.getContext("2d");
-  if (!thumb) throw new Error("썸네일 캔버스를 초기화하지 못했습니다.");
+  if (!thumb) throw new Error("export.materialsThumbFailed");
   fillGridPattern(thumb, 1280, 720, palette);
   badge(thumb, "판서랩 5분 특강", 76, 64, palette);
   label(thumb, project.topic, 78, 180, 52, 900, palette.title);

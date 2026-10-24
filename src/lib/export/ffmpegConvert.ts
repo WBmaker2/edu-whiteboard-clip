@@ -43,7 +43,7 @@ export async function convertWebmToMp4(
   if (options.signal?.aborted) {
     throw new DOMException("Export cancelled", "AbortError");
   }
-  options.onProgress?.(1, "ffmpeg 도구를 내려받는 중...(약 31MB, 최초 1회)");
+  options.onProgress?.(1, "export.ffmpegDownloading");
   const ffmpeg = await loadFfmpeg();
   if (options.signal?.aborted) {
     throw new DOMException("Export cancelled", "AbortError");
@@ -52,7 +52,7 @@ export async function convertWebmToMp4(
   const progressHandler = ({ progress }: { progress: number }) => {
     options.onProgress?.(
       Math.max(2, Math.min(98, Math.round(progress * 100))),
-      "WebM을 MP4(H.264/AAC)로 변환하는 중...",
+      "export.ffmpegConverting",
     );
   };
   ffmpeg.on("progress", progressHandler);
@@ -82,8 +82,8 @@ export async function convertWebmToMp4(
       "output.mp4",
     ]);
     const data = await ffmpeg.readFile("output.mp4");
-    if (typeof data === "string") throw new Error("변환 결과를 읽지 못했습니다.");
-    options.onProgress?.(100, "MP4 변환이 완료되었습니다.");
+    if (typeof data === "string") throw new Error("export.convertReadFailed");
+    options.onProgress?.(100, "export.ffmpegDone");
     const bytes = data as unknown as Uint8Array;
     const copy = new Uint8Array(bytes.length);
     copy.set(bytes);

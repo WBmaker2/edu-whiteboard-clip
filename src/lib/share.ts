@@ -22,7 +22,7 @@ export async function encodeSharedProject(project: Project): Promise<string> {
 export function decodeSharedProject(data: string): Project {
   const json = decompressFromEncodedURIComponent(data);
   if (!json) {
-    throw new Error("공유 링크를 읽지 못했습니다. 링크가 잘렸는지 확인해 주세요.");
+    throw new Error("share.readFailedLink");
   }
   const project = parseProjectJson(json);
   return {
@@ -53,13 +53,13 @@ export function encodeSharedQuiz(topic: string, quiz: QuizData): string {
 export function decodeSharedQuiz(data: string): SharedQuiz {
   const json = decompressFromEncodedURIComponent(data);
   if (!json) {
-    throw new Error("퀴즈 링크를 읽지 못했습니다. 링크가 잘렸는지 확인해 주세요.");
+    throw new Error("share.readFailedQuiz");
   }
   let raw: any;
   try {
     raw = JSON.parse(json);
   } catch {
-    throw new Error("퀴즈 데이터를 해석하지 못했습니다.");
+    throw new Error("share.invalidQuizData");
   }
   if (
     !raw ||
@@ -68,7 +68,7 @@ export function decodeSharedQuiz(data: string): SharedQuiz {
     !Array.isArray(raw.quiz.multipleChoice) ||
     !Array.isArray(raw.quiz.essays)
   ) {
-    throw new Error("판서랩 퀴즈 링크 형식이 아닙니다.");
+    throw new Error("share.invalidQuizFormat");
   }
   const multipleChoice = raw.quiz.multipleChoice
     .filter(

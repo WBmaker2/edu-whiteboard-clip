@@ -81,10 +81,10 @@ export function parseTemplateJson(
   try {
     raw = JSON.parse(text);
   } catch {
-    throw new Error("템플릿 파일을 읽지 못했습니다. JSON 형식을 확인해 주세요.");
+    throw new Error("template.parseFailed");
   }
   if (!raw || raw.kind !== "panseolab-template" || typeof raw.topic !== "string") {
-    throw new Error("판서랩 템플릿 파일 형식이 아닙니다.");
+    throw new Error("template.invalidFormat");
   }
   return {
     name:

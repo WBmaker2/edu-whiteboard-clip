@@ -1,7 +1,7 @@
 {
   "name": "edu-whiteboard-clip",
   "private": true,
-  "version": "0.5.2",
+  "version": "0.6.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -16,9 +16,13 @@
     "qa:mp4": "node scripts/qa-mp4.mjs",
     "qa:layouts": "node scripts/qa-layouts.mjs",
     "qa:pixel": "node scripts/qa-pixel.mjs",
+    "qa:bundle": "node scripts/qa-bundle.mjs",
+    "qa:library": "node scripts/qa-library.mjs",
+    "qa:i18n": "node scripts/qa-i18n.mjs",
+    "qa:ci": "npm run qa:smoke && npm run qa:v2 && npm run qa:ai && npm run qa:media && npm run qa:share && npm run qa:quiz && npm run qa:layouts && npm run qa:a11y && npm run qa:library && npm run qa:i18n && npm run qa:pwa",
     "qa:a11y": "node scripts/qa-a11y.mjs",
     "qa:media": "node scripts/qa-media.mjs",
-    "qa:all": "npm run qa:smoke && npm run qa:v2 && npm run qa:ai && npm run qa:media && npm run qa:a11y && npm run qa:pwa",
+    "qa:all": "npm run qa:smoke && npm run qa:v2 && npm run qa:ai && npm run qa:media && npm run qa:share && npm run qa:quiz && npm run qa:layouts && npm run qa:a11y && npm run qa:library && npm run qa:i18n && npm run qa:pwa",
     "qa:pwa": "node scripts/qa-pwa.mjs",
     "qa:share": "node scripts/qa-share.mjs",
     "qa:quiz": "node scripts/qa-quiz.mjs",

@@ -128,7 +128,7 @@ export function parseProjectJson(text: string): Project {
   try {
     raw = JSON.parse(text);
   } catch {
-    throw new Error("프로젝트 파일을 읽지 못했습니다. JSON 형식을 확인해 주세요.");
+    throw new Error("project.parseFailed");
   }
   if (
     !raw ||
@@ -136,7 +136,7 @@ export function parseProjectJson(text: string): Project {
     !Array.isArray(raw.scenes) ||
     raw.scenes.length === 0
   ) {
-    throw new Error("판서랩 프로젝트 파일 형식이 아닙니다.");
+    throw new Error("project.invalidFormat");
   }
   const assets = parseAssets(raw.assets);
   const parseVisual = (value: any): Beat["visual"] => {
@@ -158,7 +158,7 @@ export function parseProjectJson(text: string): Project {
       !Array.isArray(scene.beats) ||
       scene.beats.length === 0
     ) {
-      throw new Error(`${index + 1}번째 씬의 데이터가 올바르지 않습니다.`);
+      throw new Error("project.invalidScene");
     }
     const audioBlob =
       typeof scene.audioBase64 === "string" && scene.audioBase64
@@ -203,6 +203,10 @@ export function parseProjectJson(text: string): Project {
   });
   return {
     version: 2,
+    ...(typeof raw.id === "string" && raw.id.trim() ? { id: raw.id.trim() } : {}),
+    ...(typeof raw.title === "string" && raw.title.trim()
+      ? { title: raw.title.trim() }
+      : {}),
     aspect: raw.aspect === "9:16" ? "9:16" : "16:9",
     assets,
     topic: typeof raw.topic === "string" ? raw.topic : "불러온 프로젝트",

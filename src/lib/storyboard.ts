@@ -171,7 +171,7 @@ function rawSceneList(raw: unknown): unknown[] {
 export function normalizeStoryboardResult(raw: unknown): StoryboardResult {
   const list = rawSceneList(raw);
   if (list.length < 3) {
-    throw new Error("스토리보드 씬이 너무 적습니다. 다시 생성해 주세요.");
+    throw new Error("storyboard.tooFew");
   }
   const trimmed = list.slice(0, 7);
   const seeds = trimmed.map((item, index) =>

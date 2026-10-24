@@ -69,7 +69,7 @@ export class GeminiQueue {
                 timer = setTimeout(() => {
                   timedOut = true;
                   const error = new DOMException(
-                    `Gemini 요청이 ${Math.round(timeoutMs / 1000)}초 안에 끝나지 않아 중단했습니다.`,
+                    "gemini.timeout",
                     "TimeoutError",
                   );
                   controller.abort(error);
@@ -86,7 +86,7 @@ export class GeminiQueue {
             if (timedOut && !(error instanceof DOMException && error.name === "TimeoutError")) {
               reject(
                 new DOMException(
-                  `Gemini 요청이 ${Math.round(timeoutMs / 1000)}초 안에 끝나지 않아 중단했습니다.`,
+                  "gemini.timeout",
                   "TimeoutError",
                 ),
               );

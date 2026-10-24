@@ -16,6 +16,7 @@ import { useStudioStore } from "../store/studioStore";
 import { BGM_PRESETS, CAPTION_LANGUAGES } from "../data/presets";
 import { formatClock } from "../lib/time";
 import { useI18n } from "../lib/i18n";
+import { localLabel } from "../lib/labels";
 
 interface PlayerControlsProps {
   time: number;
@@ -44,7 +45,7 @@ export function PlayerControls({
   onLanguageChange,
   onReplay,
 }: PlayerControlsProps) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const store = useStudioStore(
     useShallow((state) => ({
       captions: state.captions,
@@ -173,7 +174,7 @@ export function PlayerControls({
             >
               {BGM_PRESETS.map((preset) => (
                 <option key={preset.id} value={preset.id}>
-                  {preset.name}
+                  {localLabel(language, "bgm", preset.id, "name", preset.name)}
                 </option>
               ))}
             </select>

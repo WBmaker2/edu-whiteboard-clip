@@ -78,7 +78,6 @@ export interface StudioState {
   activeSceneIndex: number;
   autosaveState: AutosaveState;
   lastSavedAt: string | null;
-  draftAvailable: boolean;
   toasts: Toast[];
   translations: Record<string, string[][]>;
   presentationOpen: boolean;
@@ -127,7 +126,6 @@ export interface StudioState {
   setProgress: (percent: number, message: string) => void;
   setPhase: (phase: StudioPhase) => void;
   setAutosaveState: (state: AutosaveState, savedAt?: string) => void;
-  setDraftAvailable: (value: boolean) => void;
   pushToast: (kind: Toast["kind"], message: string) => void;
   dismissToast: (id: string) => void;
   setTranslation: (lang: string, narrations: string[][]) => void;
@@ -209,7 +207,6 @@ export const useStudioStore = create<StudioState>()(
       activeSceneIndex: 0,
       autosaveState: "idle",
       lastSavedAt: null,
-      draftAvailable: false,
       toasts: [],
       translations: {},
       presentationOpen: false,
@@ -238,6 +235,7 @@ export const useStudioStore = create<StudioState>()(
             ...project,
             assets: { ...project.assets, [asset.id]: withUrl },
           },
+          autosaveState: "saving",
         });
       },
       loadProject: (project) =>
@@ -259,8 +257,7 @@ export const useStudioStore = create<StudioState>()(
           activeSceneIndex: 0,
           autosaveState: "idle",
           translations: {},
-          draftAvailable: false,
-        }),
+            }),
       setProject: (project) =>
         set({
           project,
@@ -271,8 +268,7 @@ export const useStudioStore = create<StudioState>()(
           activeSceneIndex: 0,
           autosaveState: "idle",
           translations: {},
-          draftAvailable: false,
-        }),
+            }),
       applyEdit: (mutator) => {
         const current = get().project;
         if (!current) return;
@@ -370,7 +366,6 @@ export const useStudioStore = create<StudioState>()(
       setPhase: (phase) => set({ phase }),
       setAutosaveState: (autosaveState, savedAt) =>
         set({ autosaveState, lastSavedAt: savedAt ?? get().lastSavedAt }),
-      setDraftAvailable: (draftAvailable) => set({ draftAvailable }),
       pushToast: (kind, message) => {
         const toast: Toast = { id: uid("toast"), kind, message };
         set({ toasts: [...get().toasts, toast] });

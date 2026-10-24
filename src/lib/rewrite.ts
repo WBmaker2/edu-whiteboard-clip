@@ -168,12 +168,12 @@ export async function rewriteScene(
         .join("")
         .trim()
     : "";
-  if (!raw) throw new Error("재작성 결과가 비어 있습니다. 다시 시도해 주세요.");
+  if (!raw) throw new Error("rewrite.emptyResult");
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw.replace(/```json/gi, "").replace(/```/g, "").trim());
   } catch {
-    throw new Error("재작성 JSON을 해석하지 못했습니다. 다시 생성해 주세요.");
+    throw new Error("rewrite.invalidJson");
   }
   return {
     rewrite: normalizeSceneRewrite(parsed, options.scene, options.beatCount),

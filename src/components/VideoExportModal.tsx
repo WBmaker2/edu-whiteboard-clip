@@ -28,7 +28,7 @@ export function VideoExportModal({
   onCancel,
   onClose,
 }: VideoExportModalProps) {
-  const { t } = useI18n();
+  const { t, te } = useI18n();
   const exportFormat = useStudioStore((state) => state.exportFormat);
   const formatLabel = exportFormat === "mp4" ? "MP4 (H.264/AAC)" : "WebM (VP9/Opus)";
   const inProgress = !result && !error;
@@ -52,7 +52,7 @@ export function VideoExportModal({
               <Loader2 size={30} className="spin" />
               <strong>{progress}%</strong>
             </div>
-            <p>{message}</p>
+            <p>{te(message)}</p>
             <div className="progress-track">
               <span style={{ width: `${progress}%` }} />
             </div>
@@ -65,7 +65,7 @@ export function VideoExportModal({
         <div className="export-success">
           <CheckCircle2 size={40} />
           <h3>{t("export.ready")}</h3>
-          <p>{message}</p>
+          <p>{te(message)}</p>
           <div className="export-actions">
             <a className="primary-button" href={result.url} download={result.filename}>
               <Download size={15} />
@@ -91,7 +91,7 @@ export function VideoExportModal({
       ) : error ? (
         <div className="export-error">
           <strong>{t("export.failed")}</strong>
-          <p>{error}</p>
+          <p>{te(error)}</p>
           <button type="button" className="secondary-button" onClick={onClose}>
             {t("export.close")}
           </button>
@@ -102,7 +102,7 @@ export function VideoExportModal({
             <Loader2 size={30} className="spin" />
             <strong>{progress}%</strong>
           </div>
-          <p>{message}</p>
+          <p>{te(message)}</p>
           <div className="progress-track">
             <span style={{ width: `${progress}%` }} />
           </div>

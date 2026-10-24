@@ -43,11 +43,7 @@ jobs:
           echo "dev server failed to start"
           cat /tmp/vite.log
           exit 1
-      - name: QA smoke
-        run: npm run qa:smoke
-      - name: QA v2
-        run: npm run qa:v2
-      - name: QA AI (mocked)
-        run: npm run qa:ai
-      - name: QA accessibility
-        run: npm run qa:a11y
+      - name: Full browser QA
+        run: npm run qa:ci
+      - name: QA bundle budget
+        run: npm run qa:bundle

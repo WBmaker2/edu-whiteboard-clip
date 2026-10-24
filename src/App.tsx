@@ -3,7 +3,6 @@ import { ArrowUpRight, ShieldCheck, Sparkles } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
 import { HeaderTabs, type StudioTab } from "./components/HeaderTabs";
 import { SettingsPanel } from "./components/SettingsPanel";
-import { MonitorPanel } from "./components/MonitorPanel";
 import { Toasts } from "./components/Toasts";
 
 const PresentationMode = lazy(() =>
@@ -37,26 +36,41 @@ const HistoryModal = lazy(() =>
     default: module.HistoryModal,
   })),
 );
+const LibraryModal = lazy(() =>
+  import("./components/LibraryModal").then((module) => ({
+    default: module.LibraryModal,
+  })),
+);
+const MonitorPanel = lazy(() =>
+  import("./components/MonitorPanel").then((module) => ({
+    default: module.MonitorPanel,
+  })),
+);
+const CopyLinkDialog = lazy(() =>
+  import("./components/CopyLinkDialog").then((module) => ({
+    default: module.CopyLinkDialog,
+  })),
+);
 import { useStudioStore } from "./store/studioStore";
 import { createDemoProject } from "./data/demoProject";
 import { generateSceneAudio } from "./lib/narration";
 import { projectDuration } from "./lib/time";
-import type { Project, Scene } from "./types/project";
-import { buildSrt } from "./lib/export/srt";
-import { downloadProject, parseProjectJson } from "./lib/export/project";
+import type { Project, ProjectSummary, Scene } from "./types/project";
 import { downloadCanvas } from "./lib/export/image";
-import { buildSceneSvg } from "./lib/export/svg";
+import { downloadProject, parseProjectJson } from "./lib/export/project";
 import { downloadText, sanitizeFileName } from "./lib/download";
-import { cancelFfmpegConversion, convertWebmToMp4, ffmpegConversionSupported } from "./lib/export/ffmpegConvert";
-import { exportVideo } from "./lib/export/video";
 import {
   createSnapshot,
-  deleteDraft,
-  hasDraft,
-  loadDraft,
-  saveDraft,
+  getLastProjectSummary,
+  isQuotaError,
+  loadProjectById,
+  migrateLibrary,
+  newProjectId,
+  saveProject,
+  setLastProjectId,
 } from "./lib/storage";
-import { blobUrlFor } from "./lib/blobUrls";
+import { blobUrlFor, releaseProjectUrls } from "./lib/blobUrls";
+import { startPwa } from "./lib/pwa";
 import { isAudioStale, sceneTextHash } from "./lib/sceneOps";
 import { resolveTheme, resolveVisual } from "./lib/recommend";
 import { ensureExportFonts } from "./lib/fonts";
@@ -73,11 +87,10 @@ interface ExportResult {
 }
 
 export default function App() {
-  const { t, language } = useI18n();
+  const { t, te, language } = useI18n();
   const store = useStudioStore(
     useShallow((state) => ({
       project: state.project,
-      draftAvailable: state.draftAvailable,
       presentationOpen: state.presentationOpen,
       worksheetOpen: state.worksheetOpen,
       quizOpen: state.quizOpen,
@@ -88,13 +101,17 @@ export default function App() {
       translations: state.translations,
       openModal: state.openModal,
       pushToast: state.pushToast,
-      setDraftAvailable: state.setDraftAvailable,
       setAutosaveState: state.setAutosaveState,
       resetProject: state.resetProject,
       loadProject: state.loadProject,
     })),
   );
   const [tab, setTab] = useState<StudioTab>("settings");
+  const [monitorStarted, setMonitorStarted] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [recentLesson, setRecentLesson] = useState<ProjectSummary | null>(null);
+  const [pwaApply, setPwaApply] = useState<(() => void) | null>(null);
+  const [manualShareUrl, setManualShareUrl] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [translating, setTranslating] = useState(false);
   const [converting, setConverting] = useState(false);
@@ -115,13 +132,43 @@ export default function App() {
   }, [language, t]);
 
   useEffect(() => {
+    startPwa(
+      (applyUpdate) => setPwaApply(() => applyUpdate),
+      () => useStudioStore.getState().pushToast("info", t("pwa.offlineReady")),
+    );
+  }, [t]);
+
+  useEffect(() => {
+    if (tab === "monitor") setMonitorStarted(true);
+  }, [tab]);
+
+  useEffect(() => {
+    const prefetch = () => {
+      void import("./components/MonitorPanel");
+    };
+    const timer = window.setTimeout(prefetch, 2500);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
     if (!project) return;
+    if (useStudioStore.getState().autosaveState === "idle") return;
     const timer = window.setTimeout(() => {
       const current = useStudioStore.getState().project;
       if (!current) return;
       useStudioStore.getState().setAutosaveState("saving");
-      void saveDraft(current)
-        .then(() => {
+      void saveProject(current)
+        .then((saved) => {
+          const latest = useStudioStore.getState().project;
+          if (
+            latest &&
+            (latest.id !== saved.id || latest.title !== saved.title) &&
+            saved.id
+          ) {
+            useStudioStore.getState().patch({
+              project: { ...latest, id: saved.id, title: saved.title },
+            });
+          }
           useStudioStore
             .getState()
             .setAutosaveState("saved", new Date().toISOString());
@@ -132,48 +179,70 @@ export default function App() {
             .getState()
             .pushToast(
               "error",
-              error instanceof Error
-                ? `자동 저장에 실패했습니다: ${error.message}`
-                : "자동 저장에 실패했습니다.",
+              isQuotaError(error)
+                ? t("library.quotaError")
+                : error instanceof Error
+                  ? t("draft.saveFailedReason", { message: te(error.message) })
+                  : t("draft.saveFailed"),
             );
         });
     }, 1500);
     return () => window.clearTimeout(timer);
-  }, [project]);
+  }, [project, t, te]);
 
   useEffect(() => {
     const raw = sessionStorage.getItem(SHARED_PROJECT_KEY);
     if (!raw) return;
     sessionStorage.removeItem(SHARED_PROJECT_KEY);
-    try {
-      store.loadProject(parseProjectJson(raw));
-      setTab("monitor");
-      store.pushToast(
-        "success",
-        "공유된 프로젝트를 가져왔습니다. 음성은 장면별 ‘음성 다시 만들기’로 재생성할 수 있습니다.",
-      );
-    } catch (error) {
-      store.pushToast(
-        "error",
-        error instanceof Error ? error.message : "공유 프로젝트를 가져오지 못했습니다.",
-      );
-    }
+    void (async () => {
+      try {
+        const imported = parseProjectJson(raw);
+        const shared: Project = {
+          ...imported,
+          id: newProjectId(),
+          title: imported.title ?? imported.topic,
+        };
+        store.loadProject(shared);
+        void saveProject(shared)
+          .then(() => getLastProjectSummary())
+          .then((summary) => {
+            if (summary) setRecentLesson(summary);
+          });
+        setTab("monitor");
+        store.pushToast("success", t("draft.sharedImported"));
+      } catch (error) {
+        store.pushToast(
+          "error",
+          error instanceof Error ? te(error.message) : t("draft.sharedImportFailed"),
+        );
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     let cancelled = false;
-    void hasDraft()
-      .then((exists) => {
-        if (!cancelled && exists && !useStudioStore.getState().project) {
-          useStudioStore.getState().setDraftAvailable(true);
+    void migrateLibrary()
+      .then(() => getLastProjectSummary())
+      .then((summary) => {
+        if (!cancelled && summary && !useStudioStore.getState().project) {
+          setRecentLesson(summary);
         }
       })
-      .catch(() => undefined);
+      .catch((error) => {
+        useStudioStore
+          .getState()
+          .pushToast(
+            "error",
+            error instanceof Error
+              ? t("library.migrateFailed", { message: te(error.message) })
+              : t("library.migrateFailedShort"),
+          );
+      });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t, te]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -195,19 +264,19 @@ export default function App() {
   const handleGenerate = async () => {
     const state = useStudioStore.getState();
     if (!state.apiKey.trim()) {
-      state.pushToast("error", "Gemini API 키를 입력해 주세요.");
+      state.pushToast("error", t("generate.needKey"));
       setTab("settings");
       return;
     }
     if (!state.topic.trim()) {
-      state.pushToast("error", "교육 영상 주제 또는 학습 목표를 입력해 주세요.");
+      state.pushToast("error", t("generate.needTopic"));
       setTab("settings");
       return;
     }
     const controller = new AbortController();
     generateAbortRef.current = controller;
     state.setPhase("generating");
-    state.setProgress(4, "주제에 맞는 장면 구성을 설계하는 중...");
+    state.setProgress(4, t("generate.progressDesign"));
     let fallbackNotified = false;
     try {
       const { generateStoryboard } = await import("./lib/gemini");
@@ -225,7 +294,7 @@ export default function App() {
         onFallback: (model) => {
           if (fallbackNotified) return;
           fallbackNotified = true;
-          state.pushToast("info", `선택한 모델 대신 ${model} 모델로 자동 전환했습니다.`);
+          state.pushToast("info", t("generate.modelFallback", { model }));
         },
       });
       const themeId =
@@ -239,8 +308,8 @@ export default function App() {
       const scenes: Scene[] = generated.map((scene) => ({ ...scene }));
       let ttsFailed = false;
       let completed = 0;
-      if (state.generateWithAudio) state.setProgress(24, "스토리보드가 완성되었습니다. 나레이션을 합성하는 중...");
-      else state.setProgress(60, "음성 없이 스토리보드를 저장하는 중...");
+      if (state.generateWithAudio) state.setProgress(24, t("generate.progressNarration"));
+      else state.setProgress(60, t("generate.progressSaving"));
       const tasks = scenes.map((scene, index) => async () => {
         try {
           const result = await generateSceneAudio({
@@ -252,7 +321,7 @@ export default function App() {
             onFallback: (model) => {
               if (fallbackNotified) return;
               fallbackNotified = true;
-              state.pushToast("info", `TTS 모델을 ${model}로 자동 전환했습니다.`);
+              state.pushToast("info", t("generate.ttsFallback", { model }));
             },
           });
           scenes[index] = {
@@ -271,20 +340,22 @@ export default function App() {
           completed += 1;
           state.setProgress(
             24 + Math.round((completed / scenes.length) * 70),
-            `나레이션 음성 합성 완료 (${completed}/${scenes.length}개 씬)`,
+            t("generate.progressTtsDone", { completed, total: scenes.length }),
           );
         }
       });
       if (state.generateWithAudio) {
         await Promise.allSettled(tasks.map((task) => task()));
       } else {
-        state.setProgress(90, "음성 없이 스토리보드를 준비했습니다.");
+        state.setProgress(90, t("generate.progressNoAudio"));
       }
       if (controller.signal.aborted) {
         throw new DOMException("Generation cancelled", "AbortError");
       }
       const nextProject: Project = {
         version: 2,
+        id: newProjectId(),
+        title: state.topic.trim() || undefined,
         aspect: "16:9",
         assets: {},
         topic: state.topic,
@@ -299,29 +370,35 @@ export default function App() {
         savedAt: new Date().toISOString(),
       };
       state.setProject(nextProject);
-      state.setProgress(100, "교육용 영상 제작 완료");
+      void saveProject(nextProject)
+        .then(() => getLastProjectSummary())
+        .then((summary) => {
+          if (summary) setRecentLesson(summary);
+        })
+        .catch(() => undefined);
+      state.setProgress(100, t("generate.progressDone"));
       state.setPhase("ready");
       state.pushToast(
         !state.generateWithAudio ? "info" : ttsFailed ? "info" : "success",
         !state.generateWithAudio
-          ? "스토리보드를 음성 없이 만들었습니다. 필요한 장면만 음성을 생성할 수 있습니다."
+          ? t("generate.doneNoAudio")
           : ttsFailed
-            ? "스토리보드는 완성되었습니다. 일부 씬의 음성 합성에 실패해 무음으로 저장했습니다."
-            : "스토리보드와 나레이션이 완성되었습니다. 모니터에서 재생해 보세요.",
+            ? t("generate.donePartial")
+            : t("generate.done"),
       );
       setTab("monitor");
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
         state.setPhase("idle");
         state.setProgress(0, "");
-        state.pushToast("info", "생성을 취소했습니다.");
+        state.pushToast("info", t("generate.cancelled"));
         return;
       }
       state.setPhase("idle");
       state.setProgress(0, "");
       state.pushToast(
         "error",
-        error instanceof Error ? error.message : "영상 생성 중 문제가 발생했습니다.",
+        error instanceof Error ? te(error.message) : t("generate.failed"),
       );
       setTab("settings");
     } finally {
@@ -333,45 +410,100 @@ export default function App() {
     generateAbortRef.current?.abort();
   };
 
+  const rememberRecent = () => {
+    void getLastProjectSummary().then((summary) => {
+      if (summary) setRecentLesson(summary);
+    });
+  };
+
+  const flushCurrentProject = async (): Promise<void> => {
+    const state = useStudioStore.getState();
+    const current = state.project;
+    if (
+      !current ||
+      state.autosaveState === "idle" ||
+      state.autosaveState === "saved"
+    ) {
+      return;
+    }
+    try {
+      await saveProject(current);
+    } catch (error) {
+      store.pushToast(
+        "error",
+        isQuotaError(error)
+          ? t("library.quotaError")
+          : error instanceof Error
+            ? t("draft.saveFailedReason", { message: te(error.message) })
+            : t("draft.saveFailed"),
+      );
+    }
+  };
+
+  const handleOpenProject = async (next: Project) => {
+    await flushCurrentProject();
+    const current = useStudioStore.getState().project;
+    if (current && current.id !== next.id) {
+      releaseProjectUrls(current);
+    }
+    store.loadProject(next);
+    if (next.id) void setLastProjectId(next.id).then(rememberRecent);
+    else rememberRecent();
+    setTab("monitor");
+  };
+
   const handleDemo = () => {
     const state = useStudioStore.getState();
     const demo = createDemoProject();
     const projectWithSettings: Project = {
       ...demo,
+      id: newProjectId(),
+      title: demo.topic,
       themeId: resolveTheme(state.themeId, demo.topic, undefined),
       visualStyle: resolveVisual(state.visualStyle, demo.topic, undefined),
       layoutStyle: state.layoutStyle,
       bgmId: state.bgmId,
     };
-    state.setProject(projectWithSettings);
-    state.pushToast("info", "예시 프로젝트를 불러왔습니다. API 키 없이 모든 기능을 체험해 보세요.");
-    setTab("monitor");
+    void handleOpenProject(projectWithSettings).then(() =>
+      saveProject(projectWithSettings).then(rememberRecent),
+    );
+    state.pushToast("info", t("draft.demoLoaded"));
   };
 
-  const handleNewProject = () => {
-    if (store.project && !window.confirm("현재 작업을 비우고 새 프로젝트를 시작할까요? 저장하지 않은 내용은 사라집니다.")) {
+  const handleNewProject = async () => {
+    const state = useStudioStore.getState();
+    if (state.phase === "generating" || state.phase === "exporting" || exportOpen) {
+      state.pushToast("info", t("draft.busy"));
       return;
     }
-    store.resetProject();
-    store.setDraftAvailable(false);
+    await flushCurrentProject();
+    const current = useStudioStore.getState().project;
+    releaseProjectUrls(current);
+    state.resetProject();
     setTab("settings");
-    store.pushToast("info", "새 프로젝트를 시작했습니다.");
+    state.pushToast("info", t("draft.newProject"));
   };
 
-  const handleLoadDraft = async () => {
+  const handleOpenRecent = async () => {
     try {
-      const draft = await loadDraft();
-      if (!draft) {
-        store.pushToast("error", "저장된 초안이 없습니다.");
+      const summary = recentLesson ?? (await getLastProjectSummary());
+      if (!summary) {
+        store.pushToast("error", t("draft.noSaved"));
         return;
       }
-      store.loadProject(draft);
-      setTab("monitor");
-      store.pushToast("success", "저장된 프로젝트 초안을 불러왔습니다.");
+      const loaded = await loadProjectById(summary.id);
+      if (!loaded) {
+        store.pushToast("error", t("library.notFound"));
+        return;
+      }
+      await handleOpenProject(loaded);
+      store.pushToast("success", t("library.opened"));
     } catch (error) {
       store.pushToast(
         "error",
-        error instanceof Error ? `초안을 불러오지 못했습니다: ${error.message}` : "초안을 불러오지 못했습니다.",
+        error instanceof Error
+          ? t("draft.openFailedReason", { message: error.message })
+          : t("draft.openFailed"),
       );
     }
   };
@@ -385,78 +517,108 @@ export default function App() {
     try {
       const text = await file.text();
       const imported = parseProjectJson(text);
-      store.loadProject(imported);
-      setTab("monitor");
-      store.pushToast("success", `프로젝트 파일(${file.name})을 불러왔습니다.`);
+      await flushCurrentProject();
+      const withId: Project = {
+        ...imported,
+        id: newProjectId(),
+        title: imported.title ?? imported.topic,
+      };
+      const saved = await saveProject(withId);
+      await handleOpenProject(saved);
+      store.pushToast("success", t("draft.imported", { name: file.name }));
     } catch (error) {
       store.pushToast(
         "error",
-        error instanceof Error ? `파일을 불러오지 못했습니다: ${error.message}` : "파일을 불러오지 못했습니다.",
+        error instanceof Error
+          ? t("draft.importFailedReason", { message: error.message })
+          : t("draft.importFailed"),
       );
     }
   };
 
   const handleSaveDraft = async () => {
     if (!project) {
-      store.pushToast("error", "저장할 씬 데이터가 없습니다.");
+      store.pushToast("error", t("draft.nothingToSave"));
       return;
     }
     try {
-      await saveDraft(project);
-      await createSnapshot(project, "수동 스냅샷", true);
+      const saved = await saveProject(project);
+      if (saved.id && (project.id !== saved.id || project.title !== saved.title)) {
+        useStudioStore.getState().patch({
+          project: { ...project, id: saved.id, title: saved.title },
+        });
+      }
+      await createSnapshot(saved, t("history.manualSnapshot"), true);
       store.setAutosaveState("saved", new Date().toISOString());
-      store.pushToast("success", "현재 작업을 초안과 스냅샷으로 저장했습니다.");
+      rememberRecent();
+      store.pushToast("success", t("draft.saved"));
     } catch (error) {
       store.pushToast(
         "error",
-        error instanceof Error ? `초안 저장에 실패했습니다: ${error.message}` : "초안 저장에 실패했습니다.",
+        isQuotaError(error)
+          ? t("library.quotaError")
+          : error instanceof Error
+            ? t("draft.saveFailedReason", { message: error.message })
+            : t("draft.saveFailed"),
       );
     }
+  };
+
+  const handleDeletedCurrent = () => {
+    releaseProjectUrls(useStudioStore.getState().project);
+    store.resetProject();
+    setRecentLesson(null);
+    setTab("settings");
   };
 
   const handleExportJson = async () => {
     if (!project) return;
     try {
       await downloadProject(project);
-      store.pushToast("success", "프로젝트 JSON 파일을 다운로드했습니다.");
+      store.pushToast("success", t("export.jsonDone"));
     } catch (error) {
-      store.pushToast("error", error instanceof Error ? error.message : "JSON 내보내기에 실패했습니다.");
+      store.pushToast(
+        "error",
+        error instanceof Error ? t("export.jsonFailedReason", { message: te(error.message) }) : t("export.jsonFailed"),
+      );
     }
   };
 
   const handleSnapshot = (canvas: HTMLCanvasElement, sceneIndex: number) => {
     if (!project) return;
     downloadCanvas(canvas, `panseolab_scene_${sceneIndex + 1}.png`);
-    store.pushToast("success", "현재 장면을 PNG 이미지로 저장했습니다.");
+    store.pushToast("success", t("export.pngDone"));
   };
 
-  const handleExportSvg = () => {
+  const handleExportSvg = async () => {
     const state = useStudioStore.getState();
     const project = state.project;
     if (!project) return;
     const sceneIndex = Math.max(0, Math.min(project.scenes.length - 1, state.activeSceneIndex));
     const scene = project.scenes[sceneIndex];
     if (!scene) return;
+    const { buildSceneSvg } = await import("./lib/export/svg");
     const svg = buildSceneSvg(project, scene, sceneIndex);
     downloadText(
       `${sanitizeFileName(project.topic)}_scene${sceneIndex + 1}.svg`,
       svg,
       "image/svg+xml;charset=utf-8",
     );
-    state.pushToast("success", "현재 장면을 SVG 벡터 시트로 저장했습니다. (간이 레이아웃)");
+    state.pushToast("success", t("export.svgDone"));
   };
 
-  const handleExportSrt = () => {
+  const handleExportSrt = async () => {
     if (!project) return;
     const translations =
       store.captionLang !== "ko" ? store.translations[store.captionLang] : undefined;
+    const { buildSrt } = await import("./lib/export/srt");
     const srt = buildSrt(project, translations, store.captionLang);
     downloadText(`panseolab_subtitles_${store.captionLang}.srt`, srt);
     store.pushToast(
       "success",
       store.captionLang !== "ko" && !translations
-        ? "번역 자막이 없어 한국어 원본으로 SRT를 저장했습니다."
-        : "SRT 자막 파일을 저장했습니다.",
+        ? t("export.srtOriginal")
+        : t("export.srtSaved"),
     );
   };
 
@@ -464,22 +626,22 @@ export default function App() {
     const state = useStudioStore.getState();
     if (code === "ko") {
       state.patch({ captionLang: "ko" });
-      state.pushToast("info", "자막 언어를 한국어 원본으로 설정했습니다.");
+      state.pushToast("info", t("export.captionOriginal"));
       return;
     }
     if (state.translations[code]) {
       state.patch({ captionLang: code });
       const label = CAPTION_LANGUAGES.find((item) => item.code === code)?.label ?? code;
-      state.pushToast("success", `자막 언어를 ${label}로 전환했습니다.`);
+      state.pushToast("success", t("export.captionSwitched", { label }));
       return;
     }
     if (!state.apiKey.trim()) {
-      state.pushToast("error", "다국어 자막 번역을 위해 Gemini API 키를 입력해 주세요.");
+      state.pushToast("error", t("export.translateNeedKey"));
       return;
     }
     setTranslating(true);
     const label = CAPTION_LANGUAGES.find((item) => item.code === code)?.label ?? code;
-    state.pushToast("info", `${label} 자막을 번역하는 중...`);
+    state.pushToast("info", t("export.translating", { label }));
     try {
       const { translateNarrations } = await import("./lib/gemini");
       const narrations = await translateNarrations({
@@ -490,11 +652,11 @@ export default function App() {
       });
       state.setTranslation(code, narrations);
       state.patch({ captionLang: code });
-      state.pushToast("success", `${label} 자막 번역이 완료되었습니다.`);
+      state.pushToast("success", t("export.translated", { label }));
     } catch (error) {
       state.pushToast(
         "error",
-        error instanceof Error ? `자막 번역에 실패했습니다: ${error.message}` : "자막 번역에 실패했습니다.",
+        error instanceof Error ? t("export.translateFailedReason", { message: te(error.message) }) : t("export.translateFailed"),
       );
     } finally {
       setTranslating(false);
@@ -506,7 +668,7 @@ export default function App() {
     const target = state.project?.scenes[index];
     if (!target) return;
     if (!state.apiKey.trim()) {
-      state.pushToast("error", "음성 재생성을 위해 Gemini API 키를 입력해 주세요.");
+      state.pushToast("error", t("export.audioNeedKey"));
       return;
     }
     const audio = await generateSceneAudio({
@@ -514,11 +676,11 @@ export default function App() {
       voice: state.voice,
       ttsModel: state.ttsModel,
       beats: target.beats,
-      onFallback: (model) => state.pushToast("info", `TTS 모델을 ${model}로 자동 전환했습니다.`),
+      onFallback: (model) => state.pushToast("info", t("generate.ttsFallback", { model })),
     });
     state.replaceSceneAudio(index, audio);
-    state.pushToast("success", `${index + 1}번째 씬의 나레이션을 다시 만들었습니다.`);
-  }, []);
+    state.pushToast("success", t("export.sceneAudioDone", { scene: index + 1 }));
+  }, [t]);
 
   const handleRecorded = useCallback((index: number, result: RecordedResult) => {
     const state = useStudioStore.getState();
@@ -539,20 +701,21 @@ export default function App() {
     if (staleScenes > 0) {
       state.pushToast(
         "info",
-        `음성 업데이트가 필요한 장면이 ${staleScenes}개 있습니다. 필요하면 먼저 음성을 다시 만들어 주세요.`,
+        t("export.staleScenes", { count: staleScenes }),
       );
     }
     const controller = new AbortController();
     exportAbortRef.current = controller;
     setExportOpen(true);
     setExportProgress(0);
-    setExportMessage("내보내기를 준비하는 중...");
+    setExportMessage(t("export.preparing"));
     setExportResult((previous) => {
       if (previous) URL.revokeObjectURL(previous.url);
       return null;
     });
     setExportError("");
     try {
+      const { exportVideo } = await import("./lib/export/video");
       const result = await exportVideo({
         project: state.project,
         format: state.exportFormat,
@@ -570,7 +733,7 @@ export default function App() {
           setExportMessage(message);
         },
         onFormatFallback: (message) => {
-          state.pushToast("info", message);
+          state.pushToast("info", te(message));
           setExportMessage(message);
         },
       });
@@ -578,7 +741,7 @@ export default function App() {
       const filename = `${safeTopic}_${Date.now()}.${result.extension}`;
       const url = URL.createObjectURL(result.blob);
       setExportResult({ url, filename, size: result.blob.size });
-      setExportMessage("영상 파일이 준비되었습니다.");
+      setExportMessage(t("export.ready"));
       const anchor = document.createElement("a");
       anchor.href = url;
       anchor.download = filename;
@@ -587,14 +750,14 @@ export default function App() {
       document.body.removeChild(anchor);
       state.pushToast(
         "success",
-        `비디오 내보내기가 완료되었습니다 (${result.extension.toUpperCase()}).`,
+        t("export.done", { format: result.extension.toUpperCase() }),
       );
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
         setExportOpen(false);
-        state.pushToast("info", "비디오 내보내기를 취소했습니다.");
+        state.pushToast("info", t("export.cancelled"));
       } else {
-        setExportError(error instanceof Error ? error.message : "비디오 내보내기에 실패했습니다.");
+        setExportError(error instanceof Error ? te(error.message) : t("export.failed"));
       }
     } finally {
       exportAbortRef.current = null;
@@ -603,7 +766,9 @@ export default function App() {
 
   const handleCancelExport = () => {
     if (converting) {
-      cancelFfmpegConversion();
+      void import("./lib/export/ffmpegConvert").then((module) =>
+      module.cancelFfmpegConversion(),
+    );
       return;
     }
     exportAbortRef.current?.abort();
@@ -615,10 +780,11 @@ export default function App() {
     setConverting(true);
     setExportError("");
     setExportProgress(2);
-    setExportMessage("ffmpeg 도구를 준비하는 중...");
+    setExportMessage(t("export.ffmpegPreparing"));
     try {
       const response = await fetch(exportResult.url);
       const webm = await response.blob();
+      const { convertWebmToMp4 } = await import("./lib/export/ffmpegConvert");
       const mp4 = await convertWebmToMp4(webm, {
         onProgress: (percent, message) => {
           setExportProgress(percent);
@@ -637,13 +803,13 @@ export default function App() {
       document.body.appendChild(anchor);
       anchor.click();
       document.body.removeChild(anchor);
-      state.pushToast("success", "WebM을 MP4로 변환해 다운로드했습니다.");
+      state.pushToast("success", t("export.convertDone"));
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
-        state.pushToast("info", "MP4 변환을 취소했습니다.");
+        state.pushToast("info", t("export.convertCancelled"));
       } else {
         setExportError(
-          error instanceof Error ? error.message : "MP4 변환에 실패했습니다.",
+          error instanceof Error ? te(error.message) : t("export.convertFailed"),
         );
       }
     } finally {
@@ -663,7 +829,7 @@ export default function App() {
       if (url.length > MAX_SHARE_URL_LENGTH) {
         state.pushToast(
           "info",
-          "프로젝트가 커서 링크로 공유할 수 없습니다. JSON 파일 공유를 사용해 주세요.",
+          t("share.tooLarge"),
         );
         return;
       }
@@ -671,15 +837,15 @@ export default function App() {
         await navigator.clipboard.writeText(url);
         state.pushToast(
           "success",
-          "공유 링크를 복사했습니다. (오디오·이미지 제외, 읽기 전용)",
+          t("share.copied"),
         );
       } catch {
-        window.prompt("아래 링크를 복사해 공유하세요", url);
+        setManualShareUrl(url);
       }
     } catch (error) {
       state.pushToast(
         "error",
-        error instanceof Error ? error.message : "공유 링크를 만들지 못했습니다.",
+        error instanceof Error ? te(error.message) : t("share.failed"),
       );
     }
   };
@@ -701,30 +867,57 @@ export default function App() {
         tab={tab}
         onTab={setTab}
         project={project}
-        onNewProject={handleNewProject}
-        onLoadDraft={() => void handleLoadDraft()}
+        onNewProject={() => void handleNewProject()}
+        onOpenLibrary={() => setLibraryOpen(true)}
         onImportProject={handleImportClick}
         onShowShortcuts={() => setHelpOpen(true)}
       />
 
-      {store.draftAvailable && !project && (
+      {pwaApply && !exportOpen && !store.presentationOpen && (
+        <div className="pwa-update-banner" role="status">
+          <div>
+            <strong>{t("pwa.updateTitle")}</strong>
+            <p>{t("pwa.updateBody")}</p>
+          </div>
+          <div className="draft-banner-actions">
+            <button
+              type="button"
+              className="primary-button small btn-pulse"
+              onClick={() => pwaApply()}
+            >
+              {t("pwa.updateNow")}
+            </button>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => setPwaApply(null)}
+            >
+              {t("pwa.later")}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {recentLesson && !project && (
         <div className="draft-banner" role="status">
           <div>
             <strong>{t("draft.bannerTitle")}</strong>
-            <p>{t("draft.bannerBody")}</p>
+            <p>
+              {recentLesson.title} · {t("draft.bannerBody")}
+            </p>
           </div>
           <div className="draft-banner-actions">
-            <button type="button" className="primary-button small" onClick={() => void handleLoadDraft()}>
+            <button
+              type="button"
+              className="primary-button small btn-pulse"
+              onClick={() => void handleOpenRecent()}
+            >
               {t("draft.continue")}
             </button>
             <button
               type="button"
               className="secondary-button"
-              onClick={() => {
-                void deleteDraft();
-                store.setDraftAvailable(false);
-                store.pushToast("info", t("draft.deleted"));
-              }}
+              onClick={() => setLibraryOpen(true)}
             >
               {t("draft.startNew")}
             </button>
@@ -733,7 +926,7 @@ export default function App() {
       )}
 
       <main className={`studio-layout ${tab === "monitor" ? "show-monitor" : "show-settings"}`}>
-        <h1 className="sr-only">판서랩 — 교육용 화이트보드 영상 만들기</h1>
+        <h1 className="sr-only">{t("app.heroTitle")}</h1>
         <div className="settings-column">
           <SettingsPanel
             onGenerate={() => void handleGenerate()}
@@ -742,14 +935,22 @@ export default function App() {
           />
         </div>
         <div className="monitor-column">
-          <MonitorPanel
-            project={project}
-            active={tab === "monitor"}
+          {monitorStarted && (
+            <Suspense
+              fallback={
+                <div className="panel-card monitor-loading" role="status">
+                  {t("monitor.loading")}
+                </div>
+              }
+            >
+              <MonitorPanel
+                project={project}
+                active={tab === "monitor"}
             onDemo={handleDemo}
             onSaveDraft={() => void handleSaveDraft()}
             onExportJson={() => void handleExportJson()}
             onSnapshot={handleSnapshot}
-            onExportSrt={handleExportSrt}
+            onExportSrt={() => void handleExportSrt()}
             onExportSvg={handleExportSvg}
             onOpenPresentation={() => store.openModal("presentation", true)}
             onOpenWorksheet={() => store.openModal("worksheet", true)}
@@ -759,8 +960,10 @@ export default function App() {
             onShareLink={() => void handleShareLink()}
             onRegenerate={handleRegenerateScene}
             onRecorded={handleRecorded}
-            onLanguageChange={(code) => void handleLanguageChange(code)}
-          />
+                onLanguageChange={(code) => void handleLanguageChange(code)}
+              />
+            </Suspense>
+          )}
         </div>
       </main>
 
@@ -776,7 +979,10 @@ export default function App() {
             <>
               <span className="footer-dot">·</span>
               <span>
-                {project.scenes.length}씬 · {Math.round(totalDuration)}초
+                {t("app.sceneSummary", {
+                  count: project.scenes.length,
+                  seconds: Math.round(totalDuration),
+                })}
               </span>
             </>
           )}
@@ -835,7 +1041,28 @@ export default function App() {
           />
         )}
         {store.historyOpen && (
-          <HistoryModal open onClose={() => store.openModal("history", false)} />
+          <HistoryModal
+            open
+            projectId={project?.id}
+            onClose={() => store.openModal("history", false)}
+          />
+        )}
+        {manualShareUrl && (
+          <CopyLinkDialog
+            open
+            url={manualShareUrl}
+            onClose={() => setManualShareUrl(null)}
+          />
+        )}
+        {libraryOpen && (
+          <LibraryModal
+            open
+            currentId={project?.id}
+            onClose={() => setLibraryOpen(false)}
+            onOpen={handleOpenProject}
+            onNewProject={() => void handleNewProject()}
+            onDeletedCurrent={handleDeletedCurrent}
+          />
         )}
         {helpOpen && <HelpModal open onClose={() => setHelpOpen(false)} />}
         {exportOpen && (
@@ -846,7 +1073,7 @@ export default function App() {
             result={exportResult}
             error={exportError}
             converting={converting}
-            canConvert={ffmpegConversionSupported()}
+            canConvert={typeof Worker !== "undefined"}
             onConvert={() => void handleConvertToMp4()}
             onCancel={handleCancelExport}
             onClose={closeExport}
@@ -857,7 +1084,7 @@ export default function App() {
       {translating && (
         <div className="translating-chip" role="status">
           <span className="spinner-dot" />
-          자막을 번역하는 중...
+          {t("app.translatingCaptions")}
         </div>
       )}
     </div>

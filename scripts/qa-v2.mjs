@@ -125,6 +125,37 @@ await page.waitForTimeout(400);
 const thirdTitle = await sceneCards.nth(2).locator(".scene-title strong").textContent();
 check("scene moved", secondTitle === thirdTitle, `${secondTitle} -> ${thirdTitle}`);
 
+const titlesBeforeDrag = await sceneCards.locator(".scene-title strong").allTextContents();
+const dataTransfer = await page.evaluateHandle(() => new DataTransfer());
+const dragSource = sceneCards.nth(0).locator(".scene-drag-handle");
+const dragTarget = sceneCards.nth(3);
+await dragSource.dispatchEvent("dragstart", { dataTransfer });
+await dragTarget.dispatchEvent("dragover", { dataTransfer });
+await dragTarget.dispatchEvent("drop", { dataTransfer });
+await dragSource.dispatchEvent("dragend", { dataTransfer });
+await page.waitForTimeout(500);
+const titlesAfterDrag = await sceneCards.locator(".scene-title strong").allTextContents();
+check(
+  "scene drag and drop",
+  titlesAfterDrag[3] === titlesBeforeDrag[0] && titlesAfterDrag[0] === titlesBeforeDrag[1],
+  `${titlesBeforeDrag[0]} -> ${titlesAfterDrag[3]}`,
+);
+await page.keyboard.press("ControlOrMeta+z");
+await page.waitForTimeout(400);
+const titlesAfterUndo = await sceneCards.locator(".scene-title strong").allTextContents();
+check("drag undo", JSON.stringify(titlesAfterUndo) === JSON.stringify(titlesBeforeDrag));
+
+await sceneCards.nth(0).locator(".scene-drag-handle").focus();
+await page.keyboard.press("Alt+ArrowDown");
+await page.waitForTimeout(400);
+const titlesAfterKeyboard = await sceneCards.locator(".scene-title strong").allTextContents();
+check(
+  "keyboard reorder",
+  titlesAfterKeyboard[0] === titlesBeforeDrag[1] && titlesAfterKeyboard[1] === titlesBeforeDrag[0],
+);
+await page.keyboard.press("ControlOrMeta+z");
+await page.waitForTimeout(400);
+
 await page.waitForTimeout(2200);
 const autosaveText = await page.locator(".autosave-status").first().textContent();
 check("autosave ran", /자동 저장됨/.test(autosaveText ?? ""), autosaveText ?? "");

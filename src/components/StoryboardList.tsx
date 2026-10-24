@@ -7,6 +7,7 @@ import {
   Check,
   Copy,
   FileJson,
+  GripVertical,
   ImagePlus,
   Loader2,
   Mic,
@@ -39,8 +40,9 @@ import {
   createFormulaAsset,
   createImageAssetFromFile,
 } from "../lib/assets";
-import { generateImageAsset, isImageErrorKey } from "../lib/imageGen";
+import { generateImageAsset } from "../lib/imageGen";
 import { FormulaEditor } from "./FormulaEditor";
+import { ConfirmDialog } from "./ConfirmDialog";
 import type { RecordedResult } from "../hooks/useRecorder";
 import type { SceneRewriteContent } from "../lib/rewrite";
 
@@ -69,7 +71,7 @@ export function StoryboardList({
   onSaveDraft,
   onExportJson,
 }: StoryboardListProps) {
-  const { t } = useI18n();
+  const { t, te } = useI18n();
   const store = useStudioStore(
     useShallow((state) => ({
       apiKey: state.apiKey,
@@ -94,6 +96,9 @@ export function StoryboardList({
   const [aiFor, setAiFor] = useState<number | null>(null);
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiBusy, setAiBusy] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
+  const dragIndexRef = useRef<number | null>(null);
+  const [dragOver, setDragOver] = useState<number | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const pendingImageBeatRef = useRef<number | null>(null);
 
@@ -101,9 +106,6 @@ export function StoryboardList({
     () => project.scenes.reduce((sum, scene) => sum + scene.duration, 0),
     [project.scenes],
   );
-
-  const translateError = (message: string): string =>
-    isImageErrorKey(message) ? t(message) : message;
 
   const audioBadge = (scene: Scene) => {
     if (scene.audioSource === "tts") return { label: t("storyboard.audioAi"), tone: "ai" };
@@ -265,7 +267,7 @@ export function StoryboardList({
     } catch (error) {
       store.pushToast(
         "error",
-        error instanceof Error ? translateError(error.message) : t("storyboard.aiFailed"),
+        error instanceof Error ? te(error.message) : t("storyboard.aiFailed"),
       );
     } finally {
       setAiBusy(false);
@@ -318,7 +320,7 @@ export function StoryboardList({
       store.pushToast(
         "error",
         error instanceof Error
-          ? t("storyboard.micFailed", { message: error.message })
+          ? t("storyboard.micFailed", { message: te(error.message) })
           : t("storyboard.micPermission"),
       );
     }
@@ -432,7 +434,25 @@ export function StoryboardList({
           return (
             <article
               key={scene.id}
-              className={`scene-card ${activeScene === index ? "is-active" : ""}`}
+              className={`scene-card ${activeScene === index ? "is-active" : ""} ${
+                dragOver === index ? "is-drag-over" : ""
+              }`}
+              onDragOver={(event) => {
+                if (dragIndexRef.current === null) return;
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "move";
+                setDragOver(index);
+              }}
+              onDragLeave={() => setDragOver((current) => (current === index ? null : current))}
+              onDrop={(event) => {
+                event.preventDefault();
+                const from = dragIndexRef.current;
+                if (from !== null && from !== index) {
+                  store.moveScene(from, index);
+                }
+                dragIndexRef.current = null;
+                setDragOver(null);
+              }}
             >
               <button
                 type="button"
@@ -459,6 +479,39 @@ export function StoryboardList({
               </button>
 
               <div className="scene-card-actions">
+                <span
+                  className="scene-drag-handle"
+                  draggable
+                  role="button"
+                  tabIndex={0}
+                  aria-label={t("storyboard.dragHandle", { scene: index + 1 })}
+                  title={t("storyboard.dragHint")}
+                  onDragStart={(event) => {
+                    event.dataTransfer.effectAllowed = "move";
+                    event.dataTransfer.setData("text/plain", String(index));
+                    dragIndexRef.current = index;
+                  }}
+                  onDragEnd={() => {
+                    dragIndexRef.current = null;
+                    setDragOver(null);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.altKey && event.key === "ArrowUp" && index > 0) {
+                      event.preventDefault();
+                      store.moveScene(index, index - 1);
+                    }
+                    if (
+                      event.altKey &&
+                      event.key === "ArrowDown" &&
+                      index < project.scenes.length - 1
+                    ) {
+                      event.preventDefault();
+                      store.moveScene(index, index + 1);
+                    }
+                  }}
+                >
+                  <GripVertical size={14} />
+                </span>
                 <button
                   type="button"
                   className="mini-button is-ai"
@@ -534,11 +587,7 @@ export function StoryboardList({
                 <button
                   type="button"
                   className="icon-button tiny is-danger"
-                  onClick={() => {
-                    if (window.confirm(t("storyboard.deleteConfirm", { scene: index + 1 }))) {
-                      store.deleteScene(index);
-                    }
-                  }}
+                  onClick={() => setConfirmDelete(index)}
                   disabled={!canDeleteScene(project)}
                   aria-label={t("storyboard.delete")}
                   title={t("storyboard.deleteShort")}
@@ -876,6 +925,24 @@ export function StoryboardList({
         accept="image/*"
         hidden
         onChange={(event) => void handleImageChosen(event)}
+      />
+
+      <ConfirmDialog
+        open={confirmDelete !== null}
+        title={t("storyboard.deleteTitle")}
+        message={
+          confirmDelete !== null
+            ? t("storyboard.deleteConfirm", { scene: confirmDelete + 1 })
+            : ""
+        }
+        confirmLabel={t("storyboard.delete")}
+        cancelLabel={t("common.cancel")}
+        danger
+        onCancel={() => setConfirmDelete(null)}
+        onConfirm={() => {
+          if (confirmDelete !== null) store.deleteScene(confirmDelete);
+          setConfirmDelete(null);
+        }}
       />
     </section>
   );

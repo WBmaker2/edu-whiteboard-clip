@@ -73,7 +73,7 @@ export async function callGemini({
   signal,
 }: GeminiCallOptions): Promise<{ data: any; modelUsed: string }> {
   const key = apiKey.trim();
-  if (!key) throw new Error("Gemini API 키를 입력해 주세요.");
+  if (!key) throw new Error("gemini.needKey");
   const chain = [model, ...fallbacks].filter(
     (item, index, list) => item && list.indexOf(item) === index,
   );
@@ -113,19 +113,17 @@ export async function callGemini({
           key,
         );
         if (response.status === 400 || response.status === 403) {
-          throw new Error(
-            `API 키 인증 실패 또는 요청 오류 (${response.status}): 올바른 Gemini API 키인지 확인해 주세요.`,
-          );
+          throw new Error(`gemini.authError|${response.status}`);
         }
         if (
           response.status === 404 ||
           /not found|no longer available|not supported|unsupported/i.test(message)
         ) {
-          lastError = new Error(`[${current}] ${message}`);
+          lastError = new Error(`gemini.modelError|${current}|${message}`);
           break;
         }
         if (response.status === 429 || response.status >= 500) {
-          lastError = new Error(`[${current}] 일시적 사용량 초과 또는 서버 지연: ${message}`);
+          lastError = new Error(`gemini.rateError|${current}|${message}`);
           if (attempt < attempts) {
             const wait = response.status === 429 ? retryAfterMs(response) : null;
             await sleep(wait ?? backoffMs(attempt));
@@ -133,7 +131,7 @@ export async function callGemini({
           }
           break;
         }
-        throw new Error(`Gemini API 오류 (${current}): ${message}`);
+        throw new Error(`gemini.apiError|${current}|${message}`);
       } catch (error) {
         if (
           error instanceof DOMException &&
@@ -145,7 +143,10 @@ export async function callGemini({
           error instanceof Error ? error.message : String(error),
           key,
         );
-        if (message.includes("API 키 인증 실패") || message.includes("Gemini API 오류")) {
+        if (
+          message.startsWith("gemini.authError|") ||
+          message.startsWith("gemini.apiError|")
+        ) {
           throw new Error(message);
         }
         lastError = new Error(message);
@@ -158,7 +159,7 @@ export async function callGemini({
   throw new Error(
     redactKey(
       lastError?.message ||
-        `Gemini API 호출에 실패했습니다. 시도 모델: ${chain.join(", ")}`,
+        `gemini.callFailed|${chain.join(", ")}`,
       key,
     ),
   );
@@ -166,7 +167,7 @@ export async function callGemini({
 
 export async function checkApiKey(apiKey: string): Promise<{ ok: boolean; message: string }> {
   const key = apiKey.trim();
-  if (!key) return { ok: false, message: "API 키를 입력해 주세요." };
+  if (!key) return { ok: false, message: "gemini.needKey" };
   const timeoutSignal =
     typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
       ? AbortSignal.timeout(15_000)
@@ -177,15 +178,15 @@ export async function checkApiKey(apiKey: string): Promise<{ ok: boolean; messag
       signal: timeoutSignal,
     });
     if (response.ok) {
-      return { ok: true, message: "API 키가 유효합니다. 영상 생성을 시작할 수 있어요." };
+      return { ok: true, message: "gemini.keyValid" };
     }
     if (response.status === 400 || response.status === 403) {
-      return { ok: false, message: "API 키 인증에 실패했습니다. 키를 다시 확인해 주세요." };
+      return { ok: false, message: "gemini.keyInvalid" };
     }
     const payload = await response.json().catch(() => ({}));
     return {
       ok: false,
-      message: `키 확인 중 오류가 발생했습니다 (${response.status}): ${redactKey(
+      message: `gemini.checkHttp|${response.status}|${redactKey(
         errorMessage(payload),
         key,
       )}`,
@@ -197,12 +198,12 @@ export async function checkApiKey(apiKey: string): Promise<{ ok: boolean; messag
     ) {
       return {
         ok: false,
-        message: "키 확인 요청이 시간 안에 끝나지 않았습니다. 네트워크 상태를 확인한 뒤 다시 시도해 주세요.",
+        message: "gemini.checkTimeout",
       };
     }
     return {
       ok: false,
-      message: `네트워크 오류로 키를 확인하지 못했습니다: ${redactKey(
+      message: `gemini.checkNetwork|${redactKey(
         error instanceof Error ? error.message : String(error),
         key,
       )}`,
@@ -233,12 +234,12 @@ export async function generateStoryboard(options: {
     },
   });
   const raw = candidateText(data);
-  if (!raw) throw new Error("스토리보드 응답이 비어 있습니다. 다시 시도해 주세요.");
+  if (!raw) throw new Error("gemini.emptyStoryboard");
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw.replace(/```json/gi, "").replace(/```/g, "").trim());
   } catch {
-    throw new Error("스토리보드 JSON을 해석하지 못했습니다. 다시 생성해 주세요.");
+    throw new Error("gemini.invalidStoryboard");
   }
   const { seeds, styleHint } = normalizeStoryboardResult(parsed);
   return {
@@ -297,7 +298,7 @@ export async function synthesizeNarration(options: {
   const inline = Array.isArray(parts)
     ? parts.find((part: any) => part?.inlineData?.data)?.inlineData?.data
     : null;
-  if (!inline) throw new Error("음성 데이터를 받지 못했습니다. 잠시 후 다시 시도해 주세요.");
+  if (!inline) throw new Error("gemini.emptyAudio");
   const pcm = applyEdgeFades(trimLeadingSilence(base64ToBytes(inline)));
   const blob = pcmToWav(pcm);
   const duration = pcmDuration(pcm);
@@ -342,7 +343,7 @@ ${JSON.stringify(payload)}`,
     },
   });
   const raw = candidateText(data);
-  if (!raw) throw new Error("번역 결과가 비어 있습니다.");
+  if (!raw) throw new Error("gemini.emptyTranslation");
   const parsed = JSON.parse(
     raw.replace(/```json/gi, "").replace(/```/g, "").trim(),
   );
@@ -393,7 +394,7 @@ Return strict JSON only: {"score": number (0-10), "feedback": "2-3 sentences of 
     },
   });
   const raw = candidateText(data);
-  if (!raw) throw new Error("채점 결과가 비어 있습니다.");
+  if (!raw) throw new Error("gemini.emptyGrading");
   const parsed = JSON.parse(raw.replace(/```json/gi, "").replace(/```/g, "").trim());
   const score = Math.max(0, Math.min(10, Number(parsed?.score) || 0));
   return {
