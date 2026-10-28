@@ -1447,3 +1447,63 @@
 .result-canvas-hidden {
   display: none;
 }
+
+/* Enhanced Mobile UX */
+@media (max-width: 640px) {
+  .studio-grid {
+    gap: 0.75rem;
+  }
+  
+  .studio-card {
+    padding: 1rem;
+  }
+  
+  .monitor-canvas-wrap {
+    border-radius: 8px;
+  }
+  
+  .storyboard-scene {
+    padding: 0.75rem;
+  }
+  
+  .storyboard-beat {
+    padding: 0.5rem;
+  }
+  
+  .primary-btn,
+  .ghost-btn {
+    min-height: 44px;
+    padding: 0.625rem 1rem;
+  }
+  
+  .modal-body {
+    padding: 1rem;
+  }
+  
+  input,
+  textarea,
+  select {
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 480px) {
+  .site-header {
+    padding: 0.5rem 0.75rem;
+  }
+  
+  .header-tabs {
+    gap: 0.25rem;
+  }
+  
+  .header-tab {
+    padding: 0.375rem 0.5rem;
+    font-size: 0.75rem;
+  }
+  
+  .footer {
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.75rem;
+  }
+}
